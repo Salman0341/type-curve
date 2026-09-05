@@ -79,7 +79,7 @@ export function StylePresetPicker({
       }}
     >
       <label style={{ fontSize: 13, fontWeight: 600, color: "#333" }}>
-        Select Warp Style
+        Warp type
       </label>
 
       <div

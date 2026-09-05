@@ -1,21 +1,22 @@
 import { useCallback, useState } from "react";
 import { upload } from "@canva/asset";
 import { addElementAtPoint, getCurrentPageContext } from "@canva/design";
-import { loadFont, textToSvgPathData } from "../../../utils/textToSvgPath";
-import { warpPathData } from "../../../utils/svgWarpEngine";
+import { loadFont } from "../../../utils/textToSvgPath";
 import type { TextBounds } from "../../../utils/warpTransformers";
 import {
   createBulgeTransformer,
   createRiseDecreaseTransformer,
   createRiseIncreaseTransformer,
-  createCustomMeshTransformer,
-  DEFAULT_CUSTOM_MESH,
 } from "../../../utils/warpTransformers";
-import type { CustomMeshState } from "../../../utils/customWarpMath";
 import { svgToPngDataUrl } from "../../../utils/svgToPngExport";
 import type { WarpStyle, OutlineVariant } from "../../../utils/strokeStyle";
 import { computeRenderStyle } from "../../../utils/strokeStyle";
 import type { WarpEffect } from "./useSvgTextWarp";
+import {
+  CustomMeshState,
+  DEFAULT_CUSTOM_MESH,
+  createCustomMeshTransformer,
+} from "../../../utils/customWarpMath";
 import fontUrl from "../../../assets/fonts/ArialBlack.ttf";
 
 interface WarpRenderArgs {
@@ -25,57 +26,84 @@ interface WarpRenderArgs {
   style: WarpStyle;
   variant: OutlineVariant;
   effect?: WarpEffect;
-  customMesh?: CustomMeshState;
+  customMesh?: CustomMeshState; // needed so "custom" effect actually exports with the dragged mesh
 }
 
-async function buildExportSvgMarkup(
-  args: WarpRenderArgs,
-): Promise<{ svgMarkup: string; width: number; height: number }> {
+async function buildExportSvgMarkup(args: WarpRenderArgs): Promise<{ svgMarkup: string; width: number; height: number }> {
   const font = await loadFont(fontUrl);
   const baseFontSize = 100;
 
-  const measurePath = font.getPath(args.text, 0, 0, baseFontSize);
-  const box = measurePath.getBoundingBox();
-  const textHeight = Math.max(box.y2 - box.y1, 1);
-
-  const startX = -box.x1;
-  const startY = -box.y1 + textHeight;
-
-  let d = textToSvgPathData(font, args.text, startX, startY, baseFontSize);
-
-  const finalPath = font.getPath(args.text, startX, startY, baseFontSize);
-  const finalBox = finalPath.getBoundingBox();
-  const bounds: TextBounds = {
-    minX: finalBox.x1,
-    maxX: finalBox.x2,
-    minY: finalBox.y1,
-    maxY: finalBox.y2,
-  };
+  // Build the raw (unwarped) glyph path directly from opentype, same as the
+  // preview hook does — this lets us transform every command point and then
+  // ask opentype for the REAL bounding box afterwards, instead of guessing
+  // a box up front.
+  const path = font.getPath(args.text, 0, 0, baseFontSize);
+  const naturalBB = path.getBoundingBox();
+  const naturalWidth = Math.max(naturalBB.x2 - naturalBB.x1, 1);
+  const naturalHeight = Math.max(naturalBB.y2 - naturalBB.y1, 1);
 
   const effect = args.effect || "bulge";
+
   if (effect !== "none") {
-    let transformer;
-    if (effect === "rise-decrease") {
-      transformer = createRiseDecreaseTransformer(bounds);
-    } else if (effect === "rise-increase") {
-      transformer = createRiseIncreaseTransformer(bounds);
-    } else if (effect === "custom") {
-      transformer = createCustomMeshTransformer(
-        bounds,
-        args.customMesh || DEFAULT_CUSTOM_MESH,
-      );
+    let transformPoint: (x: number, y: number) => { x: number; y: number };
+
+    if (effect === "custom") {
+      const meshTransform = createCustomMeshTransformer(args.customMesh ?? DEFAULT_CUSTOM_MESH);
+      transformPoint = (x: number, y: number) => {
+        const res = meshTransform(x - naturalBB.x1, y - naturalBB.y1, naturalWidth, naturalHeight);
+        return { x: naturalBB.x1 + res.x, y: naturalBB.y1 + res.y };
+      };
     } else {
-      transformer = createBulgeTransformer(bounds);
+      const bounds: TextBounds = {
+        minX: naturalBB.x1,
+        maxX: naturalBB.x2,
+        minY: naturalBB.y1,
+        maxY: naturalBB.y2,
+      };
+      const sideTransform =
+        effect === "rise-decrease"
+          ? createRiseDecreaseTransformer(bounds)
+          : effect === "rise-increase"
+          ? createRiseIncreaseTransformer(bounds)
+          : createBulgeTransformer(bounds);
+      transformPoint = (x: number, y: number) => sideTransform(x, y);
     }
 
-    d = warpPathData({ pathData: d, transformer });
+    // Transform every command's coordinates in place (mirrors useSvgTextWarp).
+    // This is the piece that was missing before: without it, the exported
+    // path string was warped but the VIEWBOX stayed based on the pre-warp
+    // box, so anything that stretched past those old bounds got clipped.
+    path.commands = path.commands.map((cmd: any) => {
+      const c = { ...cmd };
+      if (typeof c.x === "number" && typeof c.y === "number") {
+        const p = transformPoint(c.x, c.y);
+        c.x = p.x;
+        c.y = p.y;
+      }
+      if (typeof c.x1 === "number" && typeof c.y1 === "number") {
+        const p1 = transformPoint(c.x1, c.y1);
+        c.x1 = p1.x;
+        c.y1 = p1.y;
+      }
+      if (typeof c.x2 === "number" && typeof c.y2 === "number") {
+        const p2 = transformPoint(c.x2, c.y2);
+        c.x2 = p2.x;
+        c.y2 = p2.y;
+      }
+      return c;
+    });
   }
 
-  const renderStyle = computeRenderStyle(
-    args.style,
-    args.variant,
-    args.thickness,
-  );
+  const d = path.toPathData(3);
+
+  // Bounding box AFTER warping — this is the fix. A stretched/curved shape
+  // can extend well past a naive transform of just the 4 corners, so we
+  // measure the actual warped path, not the original.
+  const warpedBB = path.getBoundingBox();
+  const width = Math.max(warpedBB.x2 - warpedBB.x1, 1);
+  const height = Math.max(warpedBB.y2 - warpedBB.y1, 1);
+
+  const renderStyle = computeRenderStyle(args.style, args.variant, args.thickness);
   const fillColor = args.color || "#000000";
 
   const strokeElements = !renderStyle.isSolid
@@ -89,16 +117,16 @@ async function buildExportSvgMarkup(
 
   const fillElement = `<path d="${d}" fill="${fillColor}" />`;
 
-  const paddingX = Math.max((bounds.maxX - bounds.minX) * 0.1, 12);
-  const paddingY = Math.max((bounds.maxY - bounds.minY) * 0.2, 12);
+  // Padding scales with the warped size instead of a fixed 8px, so a big
+  // stretch still gets enough breathing room and nothing hugs the edge.
+  const padding = Math.max(width, height) * 0.06 + 6;
+  const vbX = warpedBB.x1 - padding;
+  const vbY = warpedBB.y1 - padding;
+  const vbW = width + padding * 2;
+  const vbH = height + padding * 2;
 
-  const vbX = bounds.minX - paddingX;
-  const vbY = bounds.minY - paddingY;
-  const vbW = Math.max(bounds.maxX - bounds.minX + paddingX * 2, 10);
-  const vbH = Math.max(bounds.maxY - bounds.minY + paddingY * 2, 10);
-
-  const exportW = Math.max(Math.round(vbW * 3), 100);
-  const exportH = Math.max(Math.round(vbH * 3), 100);
+  const exportW = Math.round(vbW * 3);
+  const exportH = Math.round(vbH * 3);
 
   const svgMarkup = `<svg xmlns="http://www.w3.org/2000/svg" width="${exportW}" height="${exportH}" viewBox="${vbX} ${vbY} ${vbW} ${vbH}">${strokeElements}${fillElement}</svg>`;
 

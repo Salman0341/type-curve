@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import opentype from "opentype.js";
 import {
-  EnvelopeMeshState,
-  DEFAULT_ENVELOPE_MESH,
-  createEnvelopeTransformer,
+  CustomMeshState,
+  DEFAULT_CUSTOM_MESH,
+  createCustomMeshTransformer,
 } from "../../../utils/customWarpMath";
 
 export type WarpEffect = "bulge" | "arch" | "flag" | "custom";
@@ -12,79 +12,132 @@ interface UseSvgTextWarpProps {
   text: string;
   effect: WarpEffect;
   fontUrl: string;
-  customMesh?: EnvelopeMeshState;
+  customMesh?: CustomMeshState;
+}
+
+export interface SvgTextBounds {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  });
 }
 
 export function useSvgTextWarp({
   text,
   effect,
   fontUrl,
-  customMesh = DEFAULT_ENVELOPE_MESH,
+  customMesh = DEFAULT_CUSTOM_MESH,
 }: UseSvgTextWarpProps) {
   const [pathData, setPathData] = useState<string>("");
   const [viewBox, setViewBox] = useState<string>("0 0 320 180");
+  const [textBounds, setTextBounds] = useState<SvgTextBounds | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  const loadedFontRef = useRef<opentype.Font | null>(null);
+  const currentFontUrlRef = useRef<string>("");
 
   useEffect(() => {
     let isMounted = true;
 
-    async function renderWarp() {
-      // 1. Text Empty Check
+    async function processTextWarp() {
       if (!text || !text.trim()) {
         if (isMounted) {
           setPathData("");
+          setTextBounds(null);
           setIsLoading(false);
         }
         return;
       }
 
       try {
-        if (isMounted) {
+        if (isMounted && !loadedFontRef.current) {
           setIsLoading(true);
-          setError(null);
         }
+        setError(null);
 
-        // 2. Safe Font Loading (Error Catching)
-        let font: opentype.Font | null = null;
-        try {
-          font = await opentype.load(fontUrl);
-        } catch (fErr) {
-          throw new Error("Font file URL not reachable or invalid.");
+        // 1. ArrayBuffer Font Loading
+        let font = loadedFontRef.current;
+
+        if (!font || currentFontUrlRef.current !== fontUrl) {
+          try {
+            const response = await withTimeout(
+              fetch(fontUrl),
+              8000,
+              "Font load timed out",
+            );
+            if (!response.ok) throw new Error(`Font fetch status: ${response.status}`);
+            const buffer = await response.arrayBuffer();
+            font = opentype.parse(buffer);
+
+            loadedFontRef.current = font;
+            currentFontUrlRef.current = fontUrl;
+          } catch (fetchErr) {
+            font = await withTimeout(
+              new Promise<opentype.Font>((resolve, reject) => {
+                opentype.load(fontUrl, (err, f) => {
+                  if (err || !f) reject(err || new Error("Font load failed"));
+                  else resolve(f);
+                });
+              }),
+              8000,
+              "Font load timed out",
+            );
+            loadedFontRef.current = font;
+            currentFontUrlRef.current = fontUrl;
+          }
         }
 
         if (!isMounted) return;
 
-        // CRITICAL FIX: Ensure 'font' is defined before calling getPath
         if (!font || typeof font.getPath !== "function") {
-          throw new Error("Opentype font instance is undefined.");
+          throw new Error("Opentype font engine failed");
         }
 
-        // 3. Generate Base Path
+        // 2. Base Path Generation
         const path = font.getPath(text, 0, 0, 72);
         if (!path || !path.commands || path.commands.length === 0) {
-          throw new Error("Could not extract glyph path from text.");
+          throw new Error("Could not parse text path");
         }
 
         const bb = path.getBoundingBox();
         const width = Math.max(bb.x2 - bb.x1, 10);
         const height = Math.max(bb.y2 - bb.y1, 10);
-        const padding = 40;
+        const naturalTextBounds = {
+          x: bb.x1,
+          y: bb.y1,
+          w: width,
+          h: height,
+        };
 
-        const currentViewBox = `${Math.floor(bb.x1 - padding)} ${Math.floor(
-          bb.y1 - padding
-        )} ${Math.floor(width + padding * 2)} ${Math.floor(height + padding * 2)}`;
-
-        if (isMounted) {
-          setViewBox(currentViewBox);
-        }
-
-        // 4. PREMADE STYLES & CUSTOM ISOLATION
+        // 3. Precise Transformation (Fixes Distortion & Misalignment)
         if (effect === "custom") {
-          // Custom Mesh Transformation
-          const activeMesh =
-            customMesh && customMesh.top ? customMesh : DEFAULT_ENVELOPE_MESH;
-          const transform = createEnvelopeTransformer(activeMesh);
+          const safeMesh =
+            customMesh &&
+            Array.isArray(customMesh.points) &&
+            (customMesh.points.length === 8 ||
+              customMesh.points.length === 10)
+              ? customMesh
+              : DEFAULT_CUSTOM_MESH;
+          const transform = createCustomMeshTransformer(safeMesh);
 
           const transformPoint = (px: number, py: number) => {
             const relX = px - bb.x1;
@@ -112,50 +165,61 @@ export function useSvgTextWarp({
             }
             return c;
           });
-        } else {
-          // Premade Styles Simple Warp Math
+        } else if (effect !== "custom") {
+          // Controlled Premade Transformations
           path.commands = path.commands.map((cmd: any) => {
             const c = { ...cmd };
             if (typeof c.x === "number" && typeof c.y === "number") {
-              const normX = (c.x - bb.x1) / width; // 0 to 1
-              let offset = 0;
+              const normX = (c.x - bb.x1) / width;
+              const relY = (c.y - bb.y1) - height / 2;
+              let offsetY = 0;
 
               if (effect === "arch") {
-                offset = -Math.sin(normX * Math.PI) * (height * 0.4);
+                offsetY = -Math.sin(normX * Math.PI) * (height * 0.35);
               } else if (effect === "bulge") {
-                const factor = Math.sin(normX * Math.PI);
-                const relY = (c.y - bb.y1) - height / 2;
-                offset = relY * factor * 0.5;
+                const bulgeFactor = Math.sin(normX * Math.PI);
+                offsetY = relY * bulgeFactor * 0.45;
               } else if (effect === "flag") {
-                offset = Math.sin(normX * Math.PI * 2) * (height * 0.25);
+                offsetY = Math.sin(normX * Math.PI * 2) * (height * 0.2);
               }
 
-              c.y += offset;
+              c.y += offsetY;
             }
             return c;
           });
         }
 
+        // 4. Recalculate Bounding Box After Deformation (Fixes Stretched Scaling)
+        const warpedBB = path.getBoundingBox();
+        const warpedWidth = Math.max(warpedBB.x2 - warpedBB.x1, 10);
+        const warpedHeight = Math.max(warpedBB.y2 - warpedBB.y1, 10);
+        const padding = 20;
+
+        const calculatedViewBox = `${Math.floor(warpedBB.x1 - padding)} ${Math.floor(
+          warpedBB.y1 - padding
+        )} ${Math.floor(warpedWidth + padding * 2)} ${Math.floor(warpedHeight + padding * 2)}`;
+
         if (isMounted) {
-          const generatedPath = path.toPathData(3);
-          setPathData(generatedPath);
+          setViewBox(calculatedViewBox);
+          setTextBounds(naturalTextBounds);
+          setPathData(path.toPathData(3));
           setIsLoading(false);
         }
       } catch (err: any) {
         if (isMounted) {
-          console.error("Text Warp Render Error:", err);
-          setError(err?.message || "Failed to render text path");
+          console.error("Warp execution error:", err);
+          setError(err?.message || "Failed to render path");
           setIsLoading(false);
         }
       }
     }
 
-    renderWarp();
+    processTextWarp();
 
     return () => {
       isMounted = false;
     };
   }, [text, effect, fontUrl, JSON.stringify(customMesh)]);
 
-  return { pathData, viewBox, isLoading, error };
+  return { pathData, viewBox, textBounds, isLoading, error };
 }
