@@ -46,18 +46,6 @@ function hasUsableBounds(bounds: Box | null | undefined): bounds is Box {
   );
 }
 
-// Pads a tight text box into a roomier, closer-to-square canvas so points
-// have real space to travel (the text box itself is only a small part of
-// the reference editor's diamond canvas).
-//
-// FIX: margin is now a modest 35% fraction applied equally to both axes,
-// using the ALREADY aspect-corrected w/h (which by this point are close to
-// square). The previous version used marginY = h * 1.0 (100%) on that same
-// post-correction h — since h had already been inflated to match the wide
-// text's width (e.g. 588 for a 618-wide text), adding another full h on
-// top and bottom tripled the total height (h + h + h ≈ 1764), which is
-// exactly the runaway box size you were seeing. Points/text then rendered
-// as a tiny cluster near the top of that oversized box.
 function padToEditorBox(natural: Box): Box {
   const MAX_ASPECT = 1.05;
   let { x, y, w, h } = natural;
@@ -98,6 +86,7 @@ export function CustomWarpEditor({
     return normalizeCustomMesh(mesh);
   }, [mesh]);
 
+  // Check karta hai ki mesh currently default state mein hai ya manipulate hua hai
   const isIdentityMesh = useMemo(
     () => JSON.stringify(safeMesh.points) === JSON.stringify(DEFAULT_CUSTOM_MESH.points),
     [safeMesh]
@@ -113,23 +102,21 @@ export function CustomWarpEditor({
   const canUseWarpedPath =
     hasUsableBounds(textBounds) && pathData && !pathData.includes("NaN");
 
-  // The mesh's 0..1 point space is anchored to the text's NATURAL (untouched)
-  // bounding box. While the mesh is still at its default/identity state we
-  // keep tracking the live box (font/text can still be loading or changing).
-  // The moment the user drags a point away from identity, we freeze it so
-  // the canvas doesn't resize/jump under the user's cursor mid-drag.
   const [naturalBox, setNaturalBox] = useState<Box>(liveTextBox);
-  useEffect(() => {
-    if (isIdentityMesh) {
-      setNaturalBox(liveTextBox);
-    }
-  }, [isIdentityMesh, liveTextBox]);
 
-  // The actual SVG viewBox: natural text box + generous (but bounded) padding.
+  useEffect(() => {
+    setNaturalBox(liveTextBox);
+  }, [liveTextBox]);
+
+  // Reset function jo mesh ko default par set karega
+  const handleResetShape = () => {
+    if (typeof onMeshChange === "function") {
+      onMeshChange(DEFAULT_CUSTOM_MESH);
+    }
+  };
+
   const editorBox = useMemo(() => padToEditorBox(naturalBox), [naturalBox]);
 
-  // Latest boxes in refs so the mousemove listener (added once per drag)
-  // always reads current values instead of a stale closure.
   const editorBoxRef = useRef(editorBox);
   const naturalBoxRef = useRef(naturalBox);
   useEffect(() => {
@@ -157,8 +144,6 @@ export function CustomWarpEditor({
         const eb = editorBoxRef.current;
         const nb = naturalBoxRef.current;
 
-        // Map screen -> editorBox units, accounting for the
-        // preserveAspectRatio="xMidYMid meet" letterbox.
         const scale = Math.min(rect.width / eb.w, rect.height / eb.h);
         const renderedW = eb.w * scale;
         const renderedH = eb.h * scale;
@@ -168,8 +153,6 @@ export function CustomWarpEditor({
         const unitX = eb.x + (clientX - rect.left - offsetX) / scale;
         const unitY = eb.y + (clientY - rect.top - offsetY) / scale;
 
-        // Then map editorBox units -> fraction of the natural text box
-        // (this is the 0..1 space mesh points actually live in).
         const relativeX = Math.min(Math.max((unitX - nb.x) / nb.w, -1.0), 2.0);
         const relativeY = Math.min(Math.max((unitY - nb.y) / nb.h, -5.0), 5.0);
 
@@ -205,9 +188,6 @@ export function CustomWarpEditor({
     [naturalBox]
   );
 
-  // Outline follows the SAME Catmull-Rom curve used for the actual text
-  // warp (evalMeshRow), sampled densely — this is what turns the visible
-  // handles into a smooth flowing shape instead of a straight-edged polygon.
   const outlinePath = useMemo(() => {
     const topRow = safeMesh.points.slice(0, 5);
     const bottomRow = safeMesh.points.slice(5, 10);
@@ -254,6 +234,7 @@ export function CustomWarpEditor({
         <span style={{ fontSize: 12, color: "#666" }}>Drag points to warp</span>
       </div>
 
+      {/* Editor SVG Canvas */}
       <div
         style={{
           width: "100%",
@@ -295,7 +276,7 @@ export function CustomWarpEditor({
             </text>
           )}
 
-          {/* Envelope outline — smooth curve, matches the reference shape */}
+          {/* Envelope outline */}
           <path
             d={outlinePath}
             fill="none"
@@ -335,6 +316,30 @@ export function CustomWarpEditor({
           )}
         </svg>
       </div>
+
+      {/* Full-width Stretched "Reset Shape" Button */}
+      <button
+        type="button"
+        onClick={handleResetShape}
+        disabled={isIdentityMesh}
+        style={{
+          width: "100%",
+          maxWidth: "100%",
+          boxSizing: "border-box",
+          padding: "10px 14px",
+          borderRadius: "8px",
+          background: "#f0f0f0",
+          color: isIdentityMesh ? "#aaa" : "#333",
+          border: "1px solid #ccc",
+          fontWeight: 600,
+          fontSize: "13px",
+          cursor: isIdentityMesh ? "not-allowed" : "pointer",
+          opacity: isIdentityMesh ? 0.6 : 1,
+          transition: "all 0.2s ease",
+        }}
+      >
+        Reset Shape
+      </button>
     </div>
   );
 }

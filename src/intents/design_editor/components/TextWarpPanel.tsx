@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+// Agar MultilineInput Canva Apps SDK UI component library se hai:
+import { MultilineInput } from "@canva/app-ui-kit"; 
 import { StylePresetPicker } from "./StylePresetPicker";
 import { CustomWarpEditor } from "./CustomWarpEditor";
 import { useSvgTextWarp, WarpEffect } from "../hooks/useSvgTextWarp";
@@ -90,24 +92,14 @@ export function TextWarpPanel() {
         </div>
       )}
 
-      {/* 2. TEXT INPUT FIELD */}
+      {/* 2. MULTILINE TEXT INPUT FIELD */}
       <div style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%", boxSizing: "border-box" }}>
         <label style={{ fontSize: "13px", fontWeight: 600, color: "#333" }}>Text</label>
-        <input
-          type="text"
+        <MultilineInput
+          autoGrow
           value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Enter text..."
-          style={{
-            width: "100%",
-            maxWidth: "100%",
-            boxSizing: "border-box",
-            padding: "10px 12px",
-            borderRadius: "8px",
-            border: "1px solid #ccc",
-            fontSize: "14px",
-            outline: "none",
-          }}
+          onChange={(val) => setText(typeof val === "string" ? val : val?.target?.value ?? "")}
+          placeholder="This is an optional placeholder."
         />
       </div>
 
