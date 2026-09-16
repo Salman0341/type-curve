@@ -1,60 +1,46 @@
 import React from "react";
-import type { WarpEffect } from "../hooks/useSvgTextWarp";
-import { Carousel, ImageCard, Box, Rows, Text } from "@canva/app-ui-kit";
-
-import d1Image from "../../../assets/presets/d1.png";
-import d2Image from "../../../assets/presets/d2.png";
-import d3Image from "../../../assets/presets/d3.png";
+import { Carousel, Text } from "@canva/app-ui-kit";
+import { useLoadedFont } from "../hooks/useLoadedFont";
+import { computeWarpedText, WarpEffect } from "../../../utils/warpTextCompute";
+import type { CustomMeshState } from "../../../utils/customWarpMath";
 
 export interface PresetOption {
   id: string;
   name: string;
   effect: WarpEffect;
-  image?: string;
   isCustom?: boolean;
 }
 
 export const PRESETS: PresetOption[] = [
-  {
-    id: "bulge",
-    name: "Bulge Circle",
-    effect: "bulge",
-    image: d1Image,
-  },
-  {
-    id: "rise-decrease",
-    name: "Perspective Shrink",
-    effect: "rise-decrease",
-    image: d2Image,
-  },
-  {
-    id: "rise-increase",
-    name: "Perspective Grow",
-    effect: "rise-increase",
-    image: d3Image,
-  },
-  {
-    id: "custom",
-    name: "Custom Mesh",
-    effect: "custom",
-    isCustom: true,
-  },
+  { id: "bulge", name: "Bulge Circle", effect: "bulge" },
+  { id: "rise-decrease", name: "Perspective Shrink", effect: "rise-decrease" },
+  { id: "rise-increase", name: "Perspective Grow", effect: "rise-increase" },
+  { id: "custom", name: "Custom Mesh", effect: "custom", isCustom: true },
 ];
 
 export { PRESETS as STYLE_PRESETS };
 
+const THUMB_SIZE = 84;
+
 interface StylePresetPickerProps {
   selectedEffect?: WarpEffect;
   onSelectEffect?: (effect: WarpEffect) => void;
+  text: string;
+  fontUrl: string;
+  color?: string;
+  customMesh?: CustomMeshState;
 }
 
 export function StylePresetPicker({
   selectedEffect,
   onSelectEffect,
+  text,
+  fontUrl,
+  color = "#000000",
 }: StylePresetPickerProps) {
-  const handlePresetClick = (e: React.MouseEvent, effect: WarpEffect) => {
-    e.stopPropagation();
-    e.preventDefault();
+  const { font } = useLoadedFont(fontUrl);
+
+  const handlePresetClick = (effect: WarpEffect) => {
     if (typeof onSelectEffect === "function") {
       try {
         onSelectEffect(effect);
@@ -64,10 +50,8 @@ export function StylePresetPicker({
     }
   };
 
-  console.log("Preset ", PRESETS);
-
   return (
-    <Rows spacing="1u">
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", boxSizing: "border-box" }}>
       <Text size="small" variant="bold">
         Warp type
       </Text>
@@ -76,33 +60,71 @@ export function StylePresetPicker({
         {PRESETS.map((preset) => {
           const isSelected = selectedEffect === preset.effect;
 
-          if (preset.id === "custom") {
-            return (
-              <div
-               
-                style={{
-                  cursor: "pointer",
-                  width: "100%",
-                  height: "100%",
-                  display: "block",
-                  outline: "none",
-                  background: "#f5f5f5",
-                  padding: "0px 10px",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-                tabIndex={0}
-                onClick={(e) => handlePresetClick(e, preset.effect)}
-              >
-                <svg
-                  width="28"
-                  height="28"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
+          // Custom Mesh never gets a live warp preview here — it always
+          // shows the static dashed-box icon, same as before.
+          let pathData = "";
+          let viewBox = "0 0 320 180";
+          if (!preset.isCustom && font && text && text.trim()) {
+            try {
+              const result = computeWarpedText(font, text, preset.effect);
+              if (result) {
+                pathData = result.pathData;
+                viewBox = result.viewBox;
+              }
+            } catch (err) {
+              console.error("Thumbnail warp error:", err);
+            }
+          }
+
+          return (
+            <div
+              key={preset.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => handlePresetClick(preset.effect)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handlePresetClick(preset.effect);
+                }
+              }}
+              style={{
+                flex: `0 0 ${THUMB_SIZE}px`,
+                width: THUMB_SIZE,
+                height: THUMB_SIZE,
+                boxSizing: "border-box",
+                cursor: "pointer",
+                outline: "none",
+                borderRadius: 10,
+                border: isSelected ? "2px solid #7d2ae8" : "1px solid #e0e0e0",
+                background: isSelected ? "#f3ecfd" : "#f9f9f9",
+                padding: 4,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 4,
+              }}
+            >
+              {preset.isCustom ? (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 4,
+                    color: isSelected ? "#7d2ae8" : "#555",
+                    pointerEvents: "none",
+                  }}
+                >
+                  <svg
+                    width="28"
+                    height="28"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
                   >
                     <path d="M3 3h18v18H3z" strokeDasharray="3 3" />
                     <circle cx="3" cy="3" r="2" fill="currentColor" />
@@ -113,30 +135,23 @@ export function StylePresetPicker({
                   <Text size="xsmall" variant="bold">
                     Custom
                   </Text>
-              </div>
-            );
-          }
-
-          return (
-            <ImageCard
-              key={preset.id}
-              ariaLabel={preset.name}
-              alt={preset.name}
-              thumbnailUrl={preset.image ?? ""}
-              thumbnailHeight={60}
-              selectable
-              selected={isSelected}
-              borderRadius="none"
-              onClick={() => {
-                if (typeof onSelectEffect === "function") {
-                  onSelectEffect(preset.effect);
-                }
-              }}
-            />
+                </div>
+              ) : (
+                <svg
+                  viewBox={viewBox}
+                  style={{ width: "100%", height: "100%", display: "block", pointerEvents: "none" }}
+                  aria-label={preset.name}
+                >
+                  {pathData && !pathData.includes("NaN") && (
+                    <path d={pathData} fill={color} />
+                  )}
+                </svg>
+              )}
+            </div>
           );
         })}
       </Carousel>
-    </Rows>
+    </div>
   );
 }
 
