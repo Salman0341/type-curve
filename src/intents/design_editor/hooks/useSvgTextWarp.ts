@@ -5,8 +5,17 @@ import {
   DEFAULT_CUSTOM_MESH,
   createCustomMeshTransformer,
 } from "../../../utils/customWarpMath";
+import type { TextBounds } from "../../../utils/warpTransformers";
+import {
+  createBulgeTransformer,
+  createRiseDecreaseTransformer,
+  createRiseIncreaseTransformer,
+} from "../../../utils/warpTransformers";
 
-export type WarpEffect = "bulge" | "arch" | "flag" | "custom";
+// Matches the preset ids used in StylePresetPicker.tsx exactly — "arch"
+// and "flag" were never real presets, they were dead branches that never
+// matched anything and made rise-decrease/rise-increase silently no-op.
+export type WarpEffect = "bulge" | "rise-decrease" | "rise-increase" | "custom";
 
 interface UseSvgTextWarpProps {
   text: string;
@@ -134,7 +143,8 @@ export function useSvgTextWarp({
             customMesh &&
             Array.isArray(customMesh.points) &&
             (customMesh.points.length === 8 ||
-              customMesh.points.length === 10)
+              customMesh.points.length === 10 ||
+              customMesh.points.length === 12)
               ? customMesh
               : DEFAULT_CUSTOM_MESH;
           const transform = createCustomMeshTransformer(safeMesh);
@@ -165,25 +175,41 @@ export function useSvgTextWarp({
             }
             return c;
           });
-        } else if (effect !== "custom") {
-          // Controlled Premade Transformations
+        } else {
+          // Same premade transformers used by the export path
+          // (useAddTextWarpToDesign.ts) — using the real functions here
+          // instead of a separate approximation is what keeps the preview
+          // and the final "Add to design" result identical.
+          const bounds: TextBounds = {
+            minX: bb.x1,
+            maxX: bb.x2,
+            minY: bb.y1,
+            maxY: bb.y2,
+          };
+
+          const pointTransform =
+            effect === "rise-decrease"
+              ? createRiseDecreaseTransformer(bounds)
+              : effect === "rise-increase"
+              ? createRiseIncreaseTransformer(bounds)
+              : createBulgeTransformer(bounds);
+
           path.commands = path.commands.map((cmd: any) => {
             const c = { ...cmd };
             if (typeof c.x === "number" && typeof c.y === "number") {
-              const normX = (c.x - bb.x1) / width;
-              const relY = (c.y - bb.y1) - height / 2;
-              let offsetY = 0;
-
-              if (effect === "arch") {
-                offsetY = -Math.sin(normX * Math.PI) * (height * 0.35);
-              } else if (effect === "bulge") {
-                const bulgeFactor = Math.sin(normX * Math.PI);
-                offsetY = relY * bulgeFactor * 0.45;
-              } else if (effect === "flag") {
-                offsetY = Math.sin(normX * Math.PI * 2) * (height * 0.2);
-              }
-
-              c.y += offsetY;
+              const p = pointTransform(c.x, c.y);
+              c.x = p.x;
+              c.y = p.y;
+            }
+            if (typeof c.x1 === "number" && typeof c.y1 === "number") {
+              const p1 = pointTransform(c.x1, c.y1);
+              c.x1 = p1.x;
+              c.y1 = p1.y;
+            }
+            if (typeof c.x2 === "number" && typeof c.y2 === "number") {
+              const p2 = pointTransform(c.x2, c.y2);
+              c.x2 = p2.x;
+              c.y2 = p2.y;
             }
             return c;
           });

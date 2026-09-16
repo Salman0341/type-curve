@@ -1,6 +1,5 @@
 import React, { useState } from "react";
-// Agar MultilineInput Canva Apps SDK UI component library se hai:
-import { MultilineInput } from "@canva/app-ui-kit"; 
+import { MultilineInput, Button } from "@canva/app-ui-kit"; 
 import { StylePresetPicker } from "./StylePresetPicker";
 import { CustomWarpEditor } from "./CustomWarpEditor";
 import { useSvgTextWarp, WarpEffect } from "../hooks/useSvgTextWarp";
@@ -43,10 +42,10 @@ export function TextWarpPanel() {
         display: "flex",
         flexDirection: "column",
         gap: "16px",
-        overflowX: "hidden", // Horizontal scroll bar block karne ke liye
+        overflowX: "hidden",
       }}
     >
-      {/* 1. TOP CANVAS PREVIEW AREA */}
+
       {effect === "custom" ? (
         <CustomWarpEditor
           text={text}
@@ -92,7 +91,6 @@ export function TextWarpPanel() {
         </div>
       )}
 
-      {/* 2. MULTILINE TEXT INPUT FIELD */}
       <div style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%", boxSizing: "border-box" }}>
         <label style={{ fontSize: "13px", fontWeight: 600, color: "#333" }}>Text</label>
         <MultilineInput
@@ -103,36 +101,19 @@ export function TextWarpPanel() {
         />
       </div>
 
-      {/* 3. PRESET CAROUSEL */}
       <div style={{ width: "100%", maxWidth: "100%", boxSizing: "border-box", overflow: "hidden" }}>
         <StylePresetPicker
           selectedEffect={effect}
           onSelectEffect={(newEffect) => setEffect(newEffect)}
         />
       </div>
-
-      {/* 4. ACTION BUTTON */}
-      <button
-        type="button"
+      <Button
         onClick={addToDesign}
         disabled={isAdding || !text.trim()}
-        style={{
-          width: "100%",
-          maxWidth: "100%",
-          boxSizing: "border-box",
-          padding: "12px 16px",
-          borderRadius: "8px",
-          background: "#7d2ae8",
-          color: "#ffffff",
-          border: "none",
-          fontWeight: 600,
-          cursor: isAdding ? "not-allowed" : "pointer",
-          opacity: isAdding ? 0.7 : 1,
-          marginTop: "4px",
-        }}
+        variant="primary"
       >
         {isAdding ? "Adding..." : "Add to design"}
-      </button>
+      </Button>
     </div>
   );
 }
