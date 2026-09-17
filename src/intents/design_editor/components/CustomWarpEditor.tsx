@@ -1,4 +1,6 @@
 import React, { useRef, useCallback, useEffect, useMemo, useState } from "react";
+import {Button} from '@canva/app-ui-kit';
+import { ArrowLeftIcon } from "@canva/app-ui-kit/icons";
 import {
   CustomMeshState,
   DEFAULT_CUSTOM_MESH,
@@ -86,7 +88,6 @@ export function CustomWarpEditor({
     return normalizeCustomMesh(mesh);
   }, [mesh]);
 
-  // Check karta hai ki mesh currently default state mein hai ya manipulate hua hai
   const isIdentityMesh = useMemo(
     () => JSON.stringify(safeMesh.points) === JSON.stringify(DEFAULT_CUSTOM_MESH.points),
     [safeMesh]
@@ -212,8 +213,8 @@ export function CustomWarpEditor({
   return (
     <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 12, boxSizing: "border-box" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <button
-          type="button"
+        <Button
+          icon={ArrowLeftIcon }
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -229,8 +230,8 @@ export function CustomWarpEditor({
             padding: 0,
           }}
         >
-          &lt; Warp editor
-        </button>
+        Warp Editor
+        </Button>
         <span style={{ fontSize: 12, color: "#666" }}>Drag points to warp</span>
       </div>
 
