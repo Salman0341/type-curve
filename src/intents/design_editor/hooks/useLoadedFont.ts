@@ -1,81 +1,116 @@
 import { useEffect, useState } from "react";
 import opentype from "opentype.js";
 
-function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  message: string,
-): Promise<T> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-
-  const timeout = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
-  });
-
-  return Promise.race([promise, timeout]).finally(() => {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-  });
-}
-
-// Module-level cache (not a ref) so it's shared across EVERY component
-// instance that calls this hook with the same URL — the main preview and
-// all 4 preset thumbnails end up sharing one single network fetch instead
-// of five.
+// Global cache for deduplicating network requests across multiple components
 const fontPromiseCache = new Map<string, Promise<opentype.Font>>();
 
-function loadFontCached(fontUrl: string): Promise<opentype.Font> {
-  if (!fontPromiseCache.has(fontUrl)) {
-    fontPromiseCache.set(
-      fontUrl,
-      (async () => {
-        try {
-          const response = await withTimeout(fetch(fontUrl), 8000, "Font load timed out");
-          if (!response.ok) throw new Error(`Font fetch status: ${response.status}`);
-          const buffer = await response.arrayBuffer();
-          return opentype.parse(buffer);
-        } catch (fetchErr) {
-          return withTimeout(
-            new Promise<opentype.Font>((resolve, reject) => {
-              opentype.load(fontUrl, (err, f) => {
-                if (err || !f) reject(err || new Error("Font load failed"));
-                else resolve(f);
-              });
-            }),
-            8000,
-            "Font load timed out",
-          );
-        }
-      })(),
-    );
-    // If loading fails, drop the cached (rejected) promise so a later
-    // retry can actually try again instead of replaying the same failure.
-    fontPromiseCache.get(fontUrl)!.catch(() => fontPromiseCache.delete(fontUrl));
+/**
+ * Direct ArrayBuffer fetcher without silent swallowing or infinite hanging callbacks.
+ */
+async function fetchAndParseFont(fontUrl: string): Promise<opentype.Font> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s strict timeout
+
+  try {
+    const response = await fetch(fontUrl, {
+      signal: controller.signal,
+      headers: {
+        Accept: "font/ttf, font/otf, font/woff, application/font-sfnt, */*",
+      },
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+
+    // Validate empty or corrupt buffer before opentype parsing
+    if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+      throw new Error("Received empty font file buffer");
+    }
+
+    // Direct opentype parsing from ArrayBuffer
+    const parsedFont = opentype.parse(arrayBuffer);
+    
+    if (!parsedFont || !parsedFont.supported) {
+      throw new Error("Unsupported font format (Ensure it is TTF, OTF, or WOFF1. WOFF2 is not supported by opentype.js)");
+    }
+
+    return parsedFont;
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+
+    if (err.name === "AbortError") {
+      throw new Error(`Font fetch timed out after 10s for URL: ${fontUrl}`);
+    }
+
+    // Catch Network/CORS failures explicitly
+    if (err instanceof TypeError && err.message.includes("Failed to fetch")) {
+      throw new Error(`CORS or Network failure when fetching font from: ${fontUrl}`);
+    }
+
+    throw err;
   }
-  return fontPromiseCache.get(fontUrl)!;
+}
+
+/**
+ * Thread-safe Cache Manager
+ */
+function loadFontCached(fontUrl: string): Promise<opentype.Font> {
+  if (!fontUrl || fontUrl.trim() === "") {
+    return Promise.reject(new Error("Font URL is empty or undefined"));
+  }
+
+  if (fontPromiseCache.has(fontUrl)) {
+    return fontPromiseCache.get(fontUrl)!;
+  }
+
+  const promise = fetchAndParseFont(fontUrl);
+
+  // If promise fails, purge from cache so retry attempts are clean
+  promise.catch(() => {
+    fontPromiseCache.delete(fontUrl);
+  });
+
+  fontPromiseCache.set(fontUrl, promise);
+  return promise;
 }
 
 export function useLoadedFont(fontUrl: string) {
   const [font, setFont] = useState<opentype.Font | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
+
+    if (!fontUrl) {
+      setFont(null);
+      setIsLoading(false);
+      setError("No font URL provided");
+      return;
+    }
+
+    // Reset state immediately on fontUrl change to prevent stale renders
+    setFont(null);
     setIsLoading(true);
     setError(null);
 
     loadFontCached(fontUrl)
-      .then((loaded) => {
+      .then((loadedFont) => {
         if (isMounted) {
-          setFont(loaded);
+          setFont(loadedFont);
           setIsLoading(false);
+          setError(null);
         }
       })
-      .catch((err) => {
+      .catch((err: Error) => {
         if (isMounted) {
-          setError(err?.message || "Failed to load font");
+          console.error(`[useLoadedFont Execution Error]:`, err.message);
+          setError(err.message || "Failed to load font");
           setIsLoading(false);
         }
       });

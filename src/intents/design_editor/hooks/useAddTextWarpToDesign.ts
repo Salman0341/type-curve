@@ -17,7 +17,6 @@ import {
   DEFAULT_CUSTOM_MESH,
   createCustomMeshTransformer,
 } from "../../../utils/customWarpMath";
-import fontUrl from "../../../assets/fonts/ArialBlack.ttf";
 
 interface WarpRenderArgs {
   text: string;
@@ -26,17 +25,14 @@ interface WarpRenderArgs {
   style: WarpStyle;
   variant: OutlineVariant;
   effect?: WarpEffect;
-  customMesh?: CustomMeshState; // needed so "custom" effect actually exports with the dragged mesh
+  customMesh?: CustomMeshState;
+  fontUrl: string; // now comes from the selected font family, not a hardcoded import
 }
 
 async function buildExportSvgMarkup(args: WarpRenderArgs): Promise<{ svgMarkup: string; width: number; height: number }> {
-  const font = await loadFont(fontUrl);
+  const font = await loadFont(args.fontUrl);
   const baseFontSize = 100;
 
-  // Build the raw (unwarped) glyph path directly from opentype, same as the
-  // preview hook does — this lets us transform every command point and then
-  // ask opentype for the REAL bounding box afterwards, instead of guessing
-  // a box up front.
   const path = font.getPath(args.text, 0, 0, baseFontSize);
   const naturalBB = path.getBoundingBox();
   const naturalWidth = Math.max(naturalBB.x2 - naturalBB.x1, 1);
@@ -69,10 +65,6 @@ async function buildExportSvgMarkup(args: WarpRenderArgs): Promise<{ svgMarkup: 
       transformPoint = (x: number, y: number) => sideTransform(x, y);
     }
 
-    // Transform every command's coordinates in place (mirrors useSvgTextWarp).
-    // This is the piece that was missing before: without it, the exported
-    // path string was warped but the VIEWBOX stayed based on the pre-warp
-    // box, so anything that stretched past those old bounds got clipped.
     path.commands = path.commands.map((cmd: any) => {
       const c = { ...cmd };
       if (typeof c.x === "number" && typeof c.y === "number") {
@@ -96,9 +88,6 @@ async function buildExportSvgMarkup(args: WarpRenderArgs): Promise<{ svgMarkup: 
 
   const d = path.toPathData(3);
 
-  // Bounding box AFTER warping — this is the fix. A stretched/curved shape
-  // can extend well past a naive transform of just the 4 corners, so we
-  // measure the actual warped path, not the original.
   const warpedBB = path.getBoundingBox();
   const width = Math.max(warpedBB.x2 - warpedBB.x1, 1);
   const height = Math.max(warpedBB.y2 - warpedBB.y1, 1);
@@ -117,8 +106,6 @@ async function buildExportSvgMarkup(args: WarpRenderArgs): Promise<{ svgMarkup: 
 
   const fillElement = `<path d="${d}" fill="${fillColor}" />`;
 
-  // Padding scales with the warped size instead of a fixed 8px, so a big
-  // stretch still gets enough breathing room and nothing hugs the edge.
   const padding = Math.max(width, height) * 0.06 + 6;
   const vbX = warpedBB.x1 - padding;
   const vbY = warpedBB.y1 - padding;

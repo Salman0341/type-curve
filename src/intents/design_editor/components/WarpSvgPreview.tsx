@@ -1,4 +1,3 @@
-import React from "react";
 import type { WarpEffect } from "../hooks/useSvgTextWarp";
 import { useSvgTextWarp } from "../hooks/useSvgTextWarp";
 import type { WarpStyle, OutlineVariant } from "../../../utils/strokeStyle";
@@ -53,7 +52,7 @@ export function WarpSvgPreview({
         viewBox={viewBox || `0 0 ${VIEWBOX_SIZE} ${VIEWBOX_SIZE}`}
         width="100%"
         height="100%"
-        preserveAspectRatio="xMidYMid meet" // <-- FIX: Fits full warped text inside box with exact aspect ratio
+        preserveAspectRatio="xMidYMid meet"  
         style={{
           display: "block",
           maxWidth: "100%",
@@ -62,7 +61,6 @@ export function WarpSvgPreview({
       >
         {pathData && (
           <>
-            {/* 1. Outline / Layers */}
             {!renderStyle.isSolid &&
               renderStyle.layers.map((layer, i) => (
                 <path
@@ -77,7 +75,6 @@ export function WarpSvgPreview({
                 />
               ))}
 
-            {/* 2. Main Solid Text */}
             <path d={pathData} fill={color} />
           </>
         )}

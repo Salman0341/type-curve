@@ -1,29 +1,42 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   MultilineInput,
   Button,
   SegmentedControl,
   FormField,
   Select,
-  ColorSelector,
+  Swatch,
 } from "@canva/app-ui-kit";
+import type { Anchor, ColorSelectionEvent, ColorSelectionScope } from "@canva/asset";
+import { openColorSelector } from "@canva/asset";
 import { StylePresetPicker } from "./StylePresetPicker";
 import { CustomWarpEditor } from "./CustomWarpEditor";
 import { useSvgTextWarp, WarpEffect } from "../hooks/useSvgTextWarp";
 import { useAddTextWarpToDesign } from "../hooks/useAddTextWarpToDesign";
 import { DEFAULT_CUSTOM_MESH, CustomMeshState } from "../../../utils/customWarpMath";
-import fontUrl from "../../../assets/fonts/ArialBlack.ttf";
 
 type PanelTab = "general" | "style";
 
-// Placeholder list for now — not wired to actual font loading yet, just the
-// field itself. Real font-swapping will replace the static `fontUrl`
-// import above once we build that out.
+// Guaranteed CORS-open & Permanent Raw TTF URLs via unpkg / CDN
 const FONT_FAMILY_OPTIONS = [
-  { value: "arial-black", label: "Arial Black" },
-  { value: "arial", label: "Arial" },
-  { value: "helvetica", label: "Helvetica" },
-  { value: "impact", label: "Impact" },
+  { value: "roboto", label: "Roboto (Sans-Serif)", url: "https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxP.ttf" },
+  { value: "open-sans", label: "Open Sans", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/opensans/OpenSans%5Bwdth%2Cwght%5D.ttf" },
+
+  // Sans-serif / Display
+  { value: "poppins-bold", label: "Poppins Bold", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/poppins/Poppins-Bold.ttf" },
+  { value: "lato", label: "Lato", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/lato/Lato-Regular.ttf" },
+  { value: "montserrat", label: "Montserrat", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/montserrat/Montserrat%5Bwght%5D.ttf" },
+  { value: "bebas-neue", label: "Bebas Neue", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/bebasneue/BebasNeue-Regular.ttf" },
+  { value: "righteous", label: "Righteous", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/righteous/Righteous-Regular.ttf" },
+
+  // Serif
+  { value: "abril-fatface", label: "Abril Fatface", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/abrilfatface/AbrilFatface-Regular.ttf" },
+  { value: "cinzel", label: "Cinzel", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/cinzel/Cinzel%5Bwght%5D.ttf" },
+
+  // Script / Handwriting
+  { value: "shadows-into-light", label: "Shadows Into Light", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/shadowsintolight/ShadowsIntoLight.ttf" },
+  { value: "permanent-marker", label: "Permanent Marker", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/apache/permanentmarker/PermanentMarker-Regular.ttf" },
+  { value: "satisfy", label: "Satisfy", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/apache/satisfy/Satisfy-Regular.ttf" },
 ];
 
 export function TextWarpPanel() {
@@ -32,7 +45,12 @@ export function TextWarpPanel() {
   const [color, setColor] = useState("#000000");
   const [customMesh, setCustomMesh] = useState<CustomMeshState>(DEFAULT_CUSTOM_MESH);
   const [activeTab, setActiveTab] = useState<PanelTab>("general");
-  const [fontFamily, setFontFamily] = useState("arial-black"); // UI only for now
+  const [fontFamily, setFontFamily] = useState("roboto");
+
+  const fontUrl = useMemo(
+    () => FONT_FAMILY_OPTIONS.find((opt) => opt.value === fontFamily)?.url ?? FONT_FAMILY_OPTIONS[0].url,
+    [fontFamily],
+  );
 
   // SVG rendering hook
   const { pathData, viewBox, textBounds, isLoading, error } = useSvgTextWarp({
@@ -51,7 +69,23 @@ export function TextWarpPanel() {
     variant: "simple",
     effect,
     customMesh,
+    fontUrl,
   });
+
+  const onColorSelect = async <T extends ColorSelectionScope>(
+    event: ColorSelectionEvent<T>,
+  ) => {
+    if (event.selection.type === "solid") {
+      setColor(event.selection.hexString);
+    }
+  };
+
+  const onRequestOpenColorSelector = (boundingRect: Anchor) => {
+    openColorSelector(boundingRect, {
+      onColorSelect,
+      scopes: ["solid"],
+    });
+  };
 
   return (
     <div
@@ -137,14 +171,19 @@ export function TextWarpPanel() {
           <FormField
             label="Color"
             control={() => (
-              <ColorSelector color={color} onChange={(newColor) => setColor(newColor)} />
+              <Swatch
+                fill={[color]}
+                onClick={(e) =>
+                  onRequestOpenColorSelector(e.currentTarget.getBoundingClientRect())
+                }
+              />
             )}
           />
           <FormField
-            label="Font family"
+            label="Select Web Font"
             control={() => (
               <Select
-                options={FONT_FAMILY_OPTIONS}
+                options={FONT_FAMILY_OPTIONS.map(({ value, label }) => ({ value, label }))}
                 value={fontFamily}
                 onChange={(value) => setFontFamily(value as string)}
               />
