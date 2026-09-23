@@ -33,8 +33,9 @@ interface Box {
 // This matches the Canva reference: 6 filled anchors + 4 hollow handles.
 const ANCHOR_INDICES = new Set([0, 2, 4, 5, 7, 9]);
 const HANDLE_INDICES = new Set([1, 3, 6, 8]);
-// Control-polygon lines: each handle connects to both anchors of its
-// own segment.
+// Handle lines only fan out from each row's CENTER anchor — not from the
+// outer left/right anchors — matching the reference (clean lines going
+// up from the curve's peak/dip to its tension handles, no crisscross).
 const HANDLE_LINKS: Array<[number, number]> = [
   [2, 1], // top-center anchor -> its left handle
   [2, 3], // top-center anchor -> its right handle
@@ -45,11 +46,9 @@ const HANDLE_LINKS: Array<[number, number]> = [
 function estimateTextBox(text: string | undefined): Box {
   const safeText = text?.trim() || "HELLO, WORLD!";
   const h = 58;
-  // Rough starting guess only — real font metrics (bold caps, kerning,
-  // specific glyphs) can be wider/narrower than any fixed multiplier.
-  // The useLayoutEffect below corrects this to the real measured size
-  // once the fallback <text> actually renders, so this estimate only
-  // matters for one frame before the true box takes over.
+  // Rough starting guess only, used for exactly one render before the
+  // measurement effect below corrects it to the real rendered size —
+  // it never has to be pixel-accurate.
   const fontSize = h * 1.35;
   const w = Math.max(safeText.length * fontSize * 0.68, 160);
   return { x: 0, y: -54, w, h };
@@ -103,31 +102,30 @@ export function CustomWarpEditor({
     [safeMesh]
   );
 
-  const liveTextBox = useMemo(() => {
-    if (hasUsableBounds(textBounds)) {
-      return textBounds;
-    }
-    return estimateTextBox(text);
-  }, [text, textBounds]);
-
   const canUseWarpedPath =
     hasUsableBounds(textBounds) && pathData && !pathData.includes("NaN");
 
-  const usingEstimate = !hasUsableBounds(textBounds);
+  const [naturalBox, setNaturalBox] = useState<Box>(() =>
+    hasUsableBounds(textBounds) ? textBounds : estimateTextBox(text)
+  );
 
-  const [naturalBox, setNaturalBox] = useState<Box>(liveTextBox);
-
+  // Real bounds arrived (font finished loading) — use them directly, no
+  // estimating/measuring needed.
   useEffect(() => {
-    setNaturalBox(liveTextBox);
-  }, [liveTextBox]);
+    if (hasUsableBounds(textBounds)) {
+      setNaturalBox(textBounds);
+    }
+  }, [textBounds]);
 
-  // The estimate in estimateTextBox() is just a guess based on character
-  // count — real font metrics can render wider or narrower. Once the
-  // fallback <text> actually renders, measure its true bounding box and
-  // correct naturalBox to match exactly, so the editor box/points always
-  // line up with what's actually drawn instead of overflowing/clipping.
+  // While we don't have real bounds yet, render the fallback <text> with
+  // whatever naturalBox we currently have, then measure its ACTUAL
+  // rendered bounding box and correct naturalBox to match exactly. Runs
+  // as a layout effect (before the browser paints) so there's no visible
+  // flash, and re-runs every render until the measured size stops
+  // changing — reliably converges to the true size instead of relying on
+  // a fixed guess formula.
   useLayoutEffect(() => {
-    if (!usingEstimate) return;
+    if (hasUsableBounds(textBounds)) return;
     const node = fallbackTextRef.current;
     if (!node) return;
 
@@ -147,7 +145,7 @@ export function CustomWarpEditor({
         Math.abs(prev.h - bbox.height) < 0.5;
       return unchanged ? prev : { x: bbox.x, y: bbox.y, w: bbox.width, h: bbox.height };
     });
-  }, [text, usingEstimate]);
+  });
 
   // Reset function jo mesh ko default par set karega
   const handleResetShape = () => {
