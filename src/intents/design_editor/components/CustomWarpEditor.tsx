@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useEffect, useMemo, useState } from "react";
+import React, { useRef, useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {Button} from '@canva/app-ui-kit';
 import { ArrowLeftIcon } from "@canva/app-ui-kit/icons";
 import {
@@ -28,14 +28,31 @@ interface Box {
   h: number;
 }
 
+// 3 anchors per row (left, center, right — all ON the curve, filled) +
+// 2 handles per row (OFF the curve, hollow, one per quadratic segment).
+// This matches the Canva reference: 6 filled anchors + 4 hollow handles.
+const ANCHOR_INDICES = new Set([0, 2, 4, 5, 7, 9]);
+const HANDLE_INDICES = new Set([1, 3, 6, 8]);
+// Control-polygon lines: each handle connects to both anchors of its
+// own segment.
+const HANDLE_LINKS: Array<[number, number]> = [
+  [2, 1], // top-center anchor -> its left handle
+  [2, 3], // top-center anchor -> its right handle
+  [7, 6], // bottom-center anchor -> its left handle
+  [7, 8], // bottom-center anchor -> its right handle
+];
+
 function estimateTextBox(text: string | undefined): Box {
   const safeText = text?.trim() || "HELLO, WORLD!";
-  return {
-    x: 0,
-    y: -54,
-    w: Math.max(safeText.length * 42, 160),
-    h: 58,
-  };
+  const h = 58;
+  // Rough starting guess only — real font metrics (bold caps, kerning,
+  // specific glyphs) can be wider/narrower than any fixed multiplier.
+  // The useLayoutEffect below corrects this to the real measured size
+  // once the fallback <text> actually renders, so this estimate only
+  // matters for one frame before the true box takes over.
+  const fontSize = h * 1.35;
+  const w = Math.max(safeText.length * fontSize * 0.68, 160);
+  return { x: 0, y: -54, w, h };
 }
 
 function hasUsableBounds(bounds: Box | null | undefined): bounds is Box {
@@ -49,26 +66,18 @@ function hasUsableBounds(bounds: Box | null | undefined): bounds is Box {
 }
 
 function padToEditorBox(natural: Box): Box {
-  const MAX_ASPECT = 1.05;
-  let { x, y, w, h } = natural;
-
-  w = Math.max(w, 10);
-  h = Math.max(h, 10);
-
-  if (w / h > MAX_ASPECT) {
-    const desiredH = w / MAX_ASPECT;
-    y -= (desiredH - h) / 2;
-    h = desiredH;
-  } else if (h / w > MAX_ASPECT) {
-    const desiredW = h / w > MAX_ASPECT ? h / MAX_ASPECT : w;
-    x -= (desiredW - w) / 2;
-    w = desiredW;
-  }
-
-  const MARGIN_FRACTION = 0.35;
-  const marginX = w * MARGIN_FRACTION;
-  const marginY = h * MARGIN_FRACTION;
-  return { x: x - marginX, y: y - marginY, w: w + marginX * 2, h: h + marginY * 2 };
+  // The SVG already has preserveAspectRatio="xMidYMid meet" inside a
+  // square container, so the browser letterboxes any aspect ratio on
+  // its own — we don't need to force this box towards square. Just pad
+  // the real box, with enough vertical room for a visible arc.
+  const marginX = natural.w * 0.35;
+  const marginY = Math.max(natural.h * 1.5, natural.w * 0.12);
+  return {
+    x: natural.x - marginX,
+    y: natural.y - marginY,
+    w: natural.w + marginX * 2,
+    h: natural.h + marginY * 2,
+  };
 }
 
 export function CustomWarpEditor({
@@ -83,6 +92,7 @@ export function CustomWarpEditor({
   onBack,
 }: CustomWarpEditorProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const fallbackTextRef = useRef<SVGTextElement | null>(null);
 
   const safeMesh = useMemo(() => {
     return normalizeCustomMesh(mesh);
@@ -103,11 +113,41 @@ export function CustomWarpEditor({
   const canUseWarpedPath =
     hasUsableBounds(textBounds) && pathData && !pathData.includes("NaN");
 
+  const usingEstimate = !hasUsableBounds(textBounds);
+
   const [naturalBox, setNaturalBox] = useState<Box>(liveTextBox);
 
   useEffect(() => {
     setNaturalBox(liveTextBox);
   }, [liveTextBox]);
+
+  // The estimate in estimateTextBox() is just a guess based on character
+  // count — real font metrics can render wider or narrower. Once the
+  // fallback <text> actually renders, measure its true bounding box and
+  // correct naturalBox to match exactly, so the editor box/points always
+  // line up with what's actually drawn instead of overflowing/clipping.
+  useLayoutEffect(() => {
+    if (!usingEstimate) return;
+    const node = fallbackTextRef.current;
+    if (!node) return;
+
+    let bbox: DOMRect;
+    try {
+      bbox = node.getBBox();
+    } catch {
+      return;
+    }
+    if (!bbox.width || !bbox.height) return;
+
+    setNaturalBox((prev) => {
+      const unchanged =
+        Math.abs(prev.x - bbox.x) < 0.5 &&
+        Math.abs(prev.y - bbox.y) < 0.5 &&
+        Math.abs(prev.w - bbox.width) < 0.5 &&
+        Math.abs(prev.h - bbox.height) < 0.5;
+      return unchanged ? prev : { x: bbox.x, y: bbox.y, w: bbox.width, h: bbox.height };
+    });
+  }, [text, usingEstimate]);
 
   // Reset function jo mesh ko default par set karega
   const handleResetShape = () => {
@@ -266,6 +306,7 @@ export function CustomWarpEditor({
             <path d={pathData} fill={color} />
           ) : (
             <text
+              ref={fallbackTextRef}
               x={naturalBox.x}
               y={naturalBox.y + naturalBox.h * 0.93}
               fill={color}
@@ -285,18 +326,44 @@ export function CustomWarpEditor({
             strokeWidth={Math.max(editorBox.w * 0.004, 1)}
           />
 
-          {/* Interactive Handles */}
+          {/* Anchor <-> handle connector lines */}
+          {HANDLE_LINKS.map(([a, b]) => {
+            const pa = toXY(safeMesh.points[a]);
+            const pb = toXY(safeMesh.points[b]);
+            return (
+              <line
+                key={`link-${a}-${b}`}
+                x1={pa.x}
+                y1={pa.y}
+                x2={pb.x}
+                y2={pb.y}
+                stroke="#0aa5ff"
+                strokeWidth={Math.max(editorBox.w * 0.003, 1)}
+                strokeDasharray="4 3"
+              />
+            );
+          })}
+
+          {/* Interactive Handles — anchors (filled) + handles (hollow) */}
           {safeMesh.points.map((pt, idx) => {
+            const isAnchor = ANCHOR_INDICES.has(idx);
+            const isHandle = HANDLE_INDICES.has(idx);
+            if (!isAnchor && !isHandle) return null;
+
             const p = toXY(pt);
+            const r = isAnchor
+              ? Math.max(editorBox.w * 0.032, 8)
+              : Math.max(editorBox.w * 0.022, 5);
+
             return (
               <circle
                 key={`point-${idx}`}
                 cx={p.x}
                 cy={p.y}
-                r={Math.max(editorBox.w * 0.025, 6)}
-                fill="#ffffff"
-                stroke="#0aa5ff"
-                strokeWidth={Math.max(editorBox.w * 0.008, 3)}
+                r={r}
+                fill={isAnchor ? "#0aa5ff" : "#ffffff"}
+                stroke={isAnchor ? "#ffffff" : "#0aa5ff"}
+                strokeWidth={Math.max(editorBox.w * (isAnchor ? 0.006 : 0.008), isAnchor ? 2 : 3)}
                 style={{ cursor: "grab" }}
                 onMouseDown={(e) => handlePointDrag(idx, e)}
                 onTouchStart={(e) => handlePointDrag(idx, e)}

@@ -1,3 +1,5 @@
+// src/utils/customWarpMath.ts
+
 export interface Point2D {
   x: number;
   y: number;
@@ -16,8 +18,15 @@ export interface EnvelopeMeshState {
   right: { p0: Point2D; c1: Point2D; c2: Point2D; p1: Point2D };
 }
 
-// 10 draggable points, matching Canva-style text handles:
-// 0-4 top row left-to-right, 5-9 bottom row left-to-right.
+// Each row (top = points 0-4, bottom = points 5-9) is TWO quadratic
+// Bezier segments chained through a shared center anchor — matching the
+// Canva-style curve UI: 3 on-curve anchors (draggable, filled) and 2
+// off-curve handles (draggable, hollow) per row.
+//   row[0] = left anchor    (on-curve)   -> filled
+//   row[1] = left handle    (off-curve)  -> hollow, controls row[0]->row[2]
+//   row[2] = center anchor  (on-curve)   -> filled, the curve's peak/dip
+//   row[3] = right handle   (off-curve)  -> hollow, controls row[2]->row[4]
+//   row[4] = right anchor   (on-curve)   -> filled
 export interface CustomMeshState {
   points: MeshPoint[];
 }
@@ -32,16 +41,16 @@ export const DEFAULT_ENVELOPE_MESH: EnvelopeMeshState = {
 
 export const DEFAULT_CUSTOM_MESH: CustomMeshState = {
   points: [
-    { x: 0, y: 0 },    // 0 top-left
-    { x: 0.25, y: 0 }, // 1 top-inner-left
-    { x: 0.5, y: 0 },  // 2 top-mid
-    { x: 0.75, y: 0 }, // 3 top-inner-right
-    { x: 1, y: 0 },    // 4 top-right
-    { x: 0, y: 1 },    // 5 bottom-left
-    { x: 0.25, y: 1 }, // 6 bottom-inner-left
-    { x: 0.5, y: 1 },  // 7 bottom-mid
-    { x: 0.75, y: 1 }, // 8 bottom-inner-right
-    { x: 1, y: 1 },    // 9 bottom-right
+    { x: 0, y: 0 },    // 0 top-left anchor
+    { x: 0.25, y: 0 }, // 1 top-left handle
+    { x: 0.5, y: 0 },  // 2 top-center anchor
+    { x: 0.75, y: 0 }, // 3 top-right handle
+    { x: 1, y: 0 },    // 4 top-right anchor
+    { x: 0, y: 1 },    // 5 bottom-left anchor
+    { x: 0.25, y: 1 }, // 6 bottom-left handle
+    { x: 0.5, y: 1 },  // 7 bottom-center anchor
+    { x: 0.75, y: 1 }, // 8 bottom-right handle
+    { x: 1, y: 1 },    // 9 bottom-right anchor
   ],
 };
 
@@ -63,7 +72,16 @@ function evalCubicBezier(p0: Point2D, c1: Point2D, c2: Point2D, p1: Point2D, t: 
   };
 }
 
-// 4. Transform Math Engine
+function evalQuadraticBezier(p0: Point2D, c: Point2D, p1: Point2D, t: number): Point2D {
+  const mt = 1 - t;
+  return {
+    x: mt * mt * p0.x + 2 * mt * t * c.x + t * t * p1.x,
+    y: mt * mt * p0.y + 2 * mt * t * c.y + t * t * p1.y,
+  };
+}
+
+// 4. Transform Math Engine (legacy — not currently wired into the app,
+// kept as-is)
 export function createEnvelopeTransformer(mesh: EnvelopeMeshState = DEFAULT_ENVELOPE_MESH) {
   const safeMesh = mesh && mesh.top ? mesh : DEFAULT_ENVELOPE_MESH;
 
@@ -105,7 +123,8 @@ export function createEnvelopeTransformer(mesh: EnvelopeMeshState = DEFAULT_ENVE
   };
 }
 
-// 5. Convert 8 draggable points -> EnvelopeMeshState
+// 5. Convert 8 draggable points -> EnvelopeMeshState (legacy helper, kept
+// as-is — unrelated to the row-based transformer the editor actually uses)
 function quadControlFromMidpoint(p0: Point2D, mid: Point2D, p1: Point2D): Point2D {
   return {
     x: 2 * mid.x - 0.5 * p0.x - 0.5 * p1.x,
@@ -163,46 +182,22 @@ export function normalizeCustomMesh(mesh?: CustomMeshState): CustomMeshState {
   return DEFAULT_CUSTOM_MESH;
 }
 
-// Catmull-Rom spline through ALL points of a row (exactly, not just its
-// neighbors) — this is what makes the curve look like the reference's
-// smooth diamond instead of a straight-segment polyline. Every one of the
-// 5 points per row (including the two "inner" quarter points) genuinely
-// bends the curve, since the spline passes through each of them exactly.
-function catmullRomPoint(p0: Point2D, p1: Point2D, p2: Point2D, p3: Point2D, t: number): Point2D {
-  const t2 = t * t;
-  const t3 = t2 * t;
-  return {
-    x:
-      0.5 *
-      (2 * p1.x +
-        (-p0.x + p2.x) * t +
-        (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
-        (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
-    y:
-      0.5 *
-      (2 * p1.y +
-        (-p0.y + p2.y) * t +
-        (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
-        (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3),
-  };
-}
-
+// Two chained quadratic Bezier segments per row (see CustomMeshState
+// comment above): row[0..2] for u in [0, 0.5], row[2..4] for u in
+// [0.5, 1]. Passes exactly through the center anchor (row[2]) at u=0.5,
+// so it's always smooth and bounded by its own control points — no
+// overshoot — while still giving 3 real on-curve anchors per row.
 export function evalMeshRow(row: MeshPoint[], u: number): Point2D {
-  const n = row.length;
-  if (n === 0) return { x: u, y: 0 };
-  if (n === 1) return row[0];
+  if (!Array.isArray(row) || row.length < 5) {
+    return { x: u, y: 0 };
+  }
 
-  const clampedU = Math.min(Math.max(u, 0), 1);
-  const scaled = clampedU * (n - 1);
-  const i = Math.min(Math.floor(scaled), n - 2);
-  const t = scaled - i;
+  const t = Math.min(Math.max(u, 0), 1);
 
-  const p0 = row[Math.max(i - 1, 0)];
-  const p1 = row[i];
-  const p2 = row[i + 1];
-  const p3 = row[Math.min(i + 2, n - 1)];
-
-  return catmullRomPoint(p0, p1, p2, p3, t);
+  if (t <= 0.5) {
+    return evalQuadraticBezier(row[0], row[1], row[2], t / 0.5);
+  }
+  return evalQuadraticBezier(row[2], row[3], row[4], (t - 0.5) / 0.5);
 }
 
 export function pointsToEnvelopeMesh(points: MeshPoint[]): EnvelopeMeshState {
@@ -251,9 +246,8 @@ export function pointsToEnvelopeMesh(points: MeshPoint[]): EnvelopeMeshState {
   };
 }
 
-// One-call transformer builder for the custom mesh — now driven by the
-// Catmull-Rom row curve so the actual warped text follows a smooth curve
-// through every point, not straight segments between them.
+// One-call transformer builder for the custom mesh — driven by the
+// two-segment quadratic Bezier row curve above.
 export function createCustomMeshTransformer(mesh: CustomMeshState = DEFAULT_CUSTOM_MESH) {
   const safeMesh = normalizeCustomMesh(mesh);
   const topRow = safeMesh.points.slice(0, 5);
