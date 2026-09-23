@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   MultilineInput,
   Button,
@@ -13,27 +13,28 @@ import { StylePresetPicker } from "./StylePresetPicker";
 import { CustomWarpEditor } from "./CustomWarpEditor";
 import { useSvgTextWarp, WarpEffect } from "../hooks/useSvgTextWarp";
 import { useAddTextWarpToDesign } from "../hooks/useAddTextWarpToDesign";
+import { useEditableTextWarp } from "../hooks/useEditableTextWarp";
 import { DEFAULT_CUSTOM_MESH, CustomMeshState } from "../../../utils/customWarpMath";
 
 type PanelTab = "general" | "style";
+type AddMode = "editable" | "image";
 
-// Guaranteed CORS-open & Permanent Raw TTF URLs via unpkg / CDN
+// NOTE: 3 of these (Open Sans, Montserrat, Cinzel) are variable-font URLs
+// (the %5Bwght%5D part). These use the same GSUB table type that crashed
+// earlier with Inter ("substFormat: 2 is not yet supported") — if any of
+// these three crash the same way, that's confirmed why, and the fix is the
+// same: swap that one entry for a static-weight file (like we did for
+// Inter -> Roboto).
 const FONT_FAMILY_OPTIONS = [
   { value: "roboto", label: "Roboto (Sans-Serif)", url: "https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxP.ttf" },
   { value: "open-sans", label: "Open Sans", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/opensans/OpenSans%5Bwdth%2Cwght%5D.ttf" },
-
-  // Sans-serif / Display
   { value: "poppins-bold", label: "Poppins Bold", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/poppins/Poppins-Bold.ttf" },
   { value: "lato", label: "Lato", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/lato/Lato-Regular.ttf" },
   { value: "montserrat", label: "Montserrat", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/montserrat/Montserrat%5Bwght%5D.ttf" },
   { value: "bebas-neue", label: "Bebas Neue", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/bebasneue/BebasNeue-Regular.ttf" },
   { value: "righteous", label: "Righteous", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/righteous/Righteous-Regular.ttf" },
-
-  // Serif
   { value: "abril-fatface", label: "Abril Fatface", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/abrilfatface/AbrilFatface-Regular.ttf" },
   { value: "cinzel", label: "Cinzel", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/cinzel/Cinzel%5Bwght%5D.ttf" },
-
-  // Script / Handwriting
   { value: "shadows-into-light", label: "Shadows Into Light", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/shadowsintolight/ShadowsIntoLight.ttf" },
   { value: "permanent-marker", label: "Permanent Marker", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/apache/permanentmarker/PermanentMarker-Regular.ttf" },
   { value: "satisfy", label: "Satisfy", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/apache/satisfy/Satisfy-Regular.ttf" },
@@ -46,6 +47,7 @@ export function TextWarpPanel() {
   const [customMesh, setCustomMesh] = useState<CustomMeshState>(DEFAULT_CUSTOM_MESH);
   const [activeTab, setActiveTab] = useState<PanelTab>("general");
   const [fontFamily, setFontFamily] = useState("roboto");
+  const [mode, setMode] = useState<AddMode>("editable");
 
   const fontUrl = useMemo(
     () => FONT_FAMILY_OPTIONS.find((opt) => opt.value === fontFamily)?.url ?? FONT_FAMILY_OPTIONS[0].url,
@@ -60,8 +62,8 @@ export function TextWarpPanel() {
     customMesh,
   });
 
-  // Canva export hook
-  const { addToDesign, isAdding } = useAddTextWarpToDesign({
+  // "Image" mode — simple, non-editable
+  const { addToDesign, isAdding: isAddingImage } = useAddTextWarpToDesign({
     text,
     color,
     thickness: 0,
@@ -71,6 +73,31 @@ export function TextWarpPanel() {
     customMesh,
     fontUrl,
   });
+
+  // "Editable" mode — creates/updates a real Canva App Element and tells us
+  // when one is selected on the canvas, so we can restore the panel.
+  // This REPLACES the old selection.registerOnChange + appElementData hack,
+  // which never actually persisted any data (addElementAtPoint has no
+  // concept of custom data — that's what the "undefined is not a valid
+  // selection scope" error and the silent restore-failure both traced back
+  // to).
+  const { addOrUpdate, isAdding: isAddingEditable, selectedData, isEditingExisting } =
+    useEditableTextWarp();
+
+  // Fires only for elements THIS app created as an editable App Element —
+  // a plain "Image" mode element can never trigger this, so switching
+  // between the two modes never conflicts with restoring state.
+  useEffect(() => {
+    if (!selectedData) return;
+    setMode("editable");
+    setText(selectedData.text);
+    setColor(selectedData.color);
+    setEffect(selectedData.effect);
+    setCustomMesh(selectedData.customMesh);
+    if (FONT_FAMILY_OPTIONS.some((opt) => opt.value === selectedData.fontFamily)) {
+      setFontFamily(selectedData.fontFamily);
+    }
+  }, [selectedData]);
 
   const onColorSelect = async <T extends ColorSelectionScope>(
     event: ColorSelectionEvent<T>,
@@ -86,6 +113,31 @@ export function TextWarpPanel() {
       scopes: ["solid"],
     });
   };
+
+  const handleAddOrUpdate = () => {
+    if (mode === "image") {
+      addToDesign();
+    } else {
+      addOrUpdate({
+        text,
+        color,
+        thickness: 0,
+        style: "solid",
+        variant: "simple",
+        effect,
+        customMesh,
+        fontUrl,
+        fontFamily,
+      });
+    }
+  };
+
+  const isAdding = mode === "image" ? isAddingImage : isAddingEditable;
+  const buttonLabel = isAdding
+    ? "Adding..."
+    : mode === "editable" && isEditingExisting
+    ? "Update design"
+    : "Add to design";
 
   return (
     <div
@@ -202,12 +254,18 @@ export function TextWarpPanel() {
           customMesh={customMesh}
         />
       </div>
-      <Button
-        onClick={addToDesign}
-        disabled={isAdding || !text.trim()}
-        variant="primary"
-      >
-        {isAdding ? "Adding..." : "Add to design"}
+
+      <SegmentedControl
+        options={[
+          { value: "editable", label: "Editable" },
+          { value: "image", label: "Image" },
+        ]}
+        value={mode}
+        onChange={(value) => setMode(value as AddMode)}
+      />
+
+      <Button onClick={handleAddOrUpdate} disabled={isAdding || !text.trim()} variant="primary">
+        {buttonLabel}
       </Button>
     </div>
   );
