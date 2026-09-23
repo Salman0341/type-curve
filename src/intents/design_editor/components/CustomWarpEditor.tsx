@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
-import {Button} from '@canva/app-ui-kit';
+import { Button } from "@canva/app-ui-kit";
 import { ArrowLeftIcon } from "@canva/app-ui-kit/icons";
 import {
   CustomMeshState,
@@ -28,27 +28,18 @@ interface Box {
   h: number;
 }
 
-// 3 anchors per row (left, center, right — all ON the curve, filled) +
-// 2 handles per row (OFF the curve, hollow, one per quadratic segment).
-// This matches the Canva reference: 6 filled anchors + 4 hollow handles.
 const ANCHOR_INDICES = new Set([0, 2, 4, 5, 7, 9]);
 const HANDLE_INDICES = new Set([1, 3, 6, 8]);
-// Handle lines only fan out from each row's CENTER anchor — not from the
-// outer left/right anchors — matching the reference (clean lines going
-// up from the curve's peak/dip to its tension handles, no crisscross).
 const HANDLE_LINKS: Array<[number, number]> = [
-  [2, 1], // top-center anchor -> its left handle
-  [2, 3], // top-center anchor -> its right handle
-  [7, 6], // bottom-center anchor -> its left handle
-  [7, 8], // bottom-center anchor -> its right handle
+  [2, 1],
+  [2, 3],
+  [7, 6],
+  [7, 8],
 ];
 
 function estimateTextBox(text: string | undefined): Box {
   const safeText = text?.trim() || "HELLO, WORLD!";
   const h = 58;
-  // Rough starting guess only, used for exactly one render before the
-  // measurement effect below corrects it to the real rendered size —
-  // it never has to be pixel-accurate.
   const fontSize = h * 1.35;
   const w = Math.max(safeText.length * fontSize * 0.68, 160);
   return { x: 0, y: -54, w, h };
@@ -60,15 +51,11 @@ function hasUsableBounds(bounds: Box | null | undefined): bounds is Box {
       Number.isFinite(bounds.x) &&
       Number.isFinite(bounds.y) &&
       bounds.w > 0 &&
-      bounds.h > 0,
+      bounds.h > 0
   );
 }
 
 function padToEditorBox(natural: Box): Box {
-  // The SVG already has preserveAspectRatio="xMidYMid meet" inside a
-  // square container, so the browser letterboxes any aspect ratio on
-  // its own — we don't need to force this box towards square. Just pad
-  // the real box, with enough vertical room for a visible arc.
   const marginX = natural.w * 0.35;
   const marginY = Math.max(natural.h * 1.5, natural.w * 0.12);
   return {
@@ -109,21 +96,16 @@ export function CustomWarpEditor({
     hasUsableBounds(textBounds) ? textBounds : estimateTextBox(text)
   );
 
-  // Real bounds arrived (font finished loading) — use them directly, no
-  // estimating/measuring needed.
+  // FIXED: Real bounds aate hi mesh state ko auto-trigger karke initial warp compute karein
   useEffect(() => {
     if (hasUsableBounds(textBounds)) {
       setNaturalBox(textBounds);
+      if (typeof onMeshChange === "function") {
+        onMeshChange(safeMesh);
+      }
     }
   }, [textBounds]);
 
-  // While we don't have real bounds yet, render the fallback <text> with
-  // whatever naturalBox we currently have, then measure its ACTUAL
-  // rendered bounding box and correct naturalBox to match exactly. Runs
-  // as a layout effect (before the browser paints) so there's no visible
-  // flash, and re-runs every render until the measured size stops
-  // changing — reliably converges to the true size instead of relying on
-  // a fixed guess formula.
   useLayoutEffect(() => {
     if (hasUsableBounds(textBounds)) return;
     const node = fallbackTextRef.current;
@@ -147,7 +129,6 @@ export function CustomWarpEditor({
     });
   });
 
-  // Reset function jo mesh ko default par set karega
   const handleResetShape = () => {
     if (typeof onMeshChange === "function") {
       onMeshChange(DEFAULT_CUSTOM_MESH);
@@ -252,7 +233,7 @@ export function CustomWarpEditor({
     <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 12, boxSizing: "border-box" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <Button
-          icon={ArrowLeftIcon }
+          icon={ArrowLeftIcon}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -268,12 +249,11 @@ export function CustomWarpEditor({
             padding: 0,
           }}
         >
-        Warp Editor
+          Warp Editor
         </Button>
         <span style={{ fontSize: 12, color: "#666" }}>Drag points to warp</span>
       </div>
 
-      {/* Editor SVG Canvas */}
       <div
         style={{
           width: "100%",
@@ -303,20 +283,22 @@ export function CustomWarpEditor({
           {canUseWarpedPath ? (
             <path d={pathData} fill={color} />
           ) : (
+            // FIXED: textLength and lengthAdjust added to keep fallback text contained inside naturalBox
             <text
               ref={fallbackTextRef}
               x={naturalBox.x}
-              y={naturalBox.y + naturalBox.h * 0.93}
+              y={naturalBox.y + naturalBox.h * 0.85}
+              textLength={naturalBox.w}
+              lengthAdjust="spacingAndGlyphs"
               fill={color}
               fontFamily="Arial Black, Arial, sans-serif"
-              fontSize={naturalBox.h * 1.35}
+              fontSize={naturalBox.h * 0.85}
               fontWeight={900}
             >
               {text}
             </text>
           )}
 
-          {/* Envelope outline */}
           <path
             d={outlinePath}
             fill="none"
@@ -324,7 +306,6 @@ export function CustomWarpEditor({
             strokeWidth={Math.max(editorBox.w * 0.004, 1)}
           />
 
-          {/* Anchor <-> handle connector lines */}
           {HANDLE_LINKS.map(([a, b]) => {
             const pa = toXY(safeMesh.points[a]);
             const pb = toXY(safeMesh.points[b]);
@@ -342,7 +323,6 @@ export function CustomWarpEditor({
             );
           })}
 
-          {/* Interactive Handles — anchors (filled) + handles (hollow) */}
           {safeMesh.points.map((pt, idx) => {
             const isAnchor = ANCHOR_INDICES.has(idx);
             const isHandle = HANDLE_INDICES.has(idx);
@@ -383,7 +363,6 @@ export function CustomWarpEditor({
         </svg>
       </div>
 
-      {/* Full-width Stretched "Reset Shape" Button */}
       <button
         type="button"
         onClick={handleResetShape}

@@ -1,5 +1,3 @@
-// src/utils/customWarpMath.ts
-
 export interface Point2D {
   x: number;
   y: number;
@@ -18,15 +16,6 @@ export interface EnvelopeMeshState {
   right: { p0: Point2D; c1: Point2D; c2: Point2D; p1: Point2D };
 }
 
-// Each row (top = points 0-4, bottom = points 5-9) is TWO quadratic
-// Bezier segments chained through a shared center anchor — matching the
-// Canva-style curve UI: 3 on-curve anchors (draggable, filled) and 2
-// off-curve handles (draggable, hollow) per row.
-//   row[0] = left anchor    (on-curve)   -> filled
-//   row[1] = left handle    (off-curve)  -> hollow, controls row[0]->row[2]
-//   row[2] = center anchor  (on-curve)   -> filled, the curve's peak/dip
-//   row[3] = right handle   (off-curve)  -> hollow, controls row[2]->row[4]
-//   row[4] = right anchor   (on-curve)   -> filled
 export interface CustomMeshState {
   points: MeshPoint[];
 }
@@ -80,8 +69,7 @@ function evalQuadraticBezier(p0: Point2D, c: Point2D, p1: Point2D, t: number): P
   };
 }
 
-// 4. Transform Math Engine (legacy — not currently wired into the app,
-// kept as-is)
+// 4. Transform Math Engine
 export function createEnvelopeTransformer(mesh: EnvelopeMeshState = DEFAULT_ENVELOPE_MESH) {
   const safeMesh = mesh && mesh.top ? mesh : DEFAULT_ENVELOPE_MESH;
 
@@ -123,8 +111,7 @@ export function createEnvelopeTransformer(mesh: EnvelopeMeshState = DEFAULT_ENVE
   };
 }
 
-// 5. Convert 8 draggable points -> EnvelopeMeshState (legacy helper, kept
-// as-is — unrelated to the row-based transformer the editor actually uses)
+// 5. Convert 8 draggable points -> EnvelopeMeshState
 function quadControlFromMidpoint(p0: Point2D, mid: Point2D, p1: Point2D): Point2D {
   return {
     x: 2 * mid.x - 0.5 * p0.x - 0.5 * p1.x,
@@ -182,11 +169,6 @@ export function normalizeCustomMesh(mesh?: CustomMeshState): CustomMeshState {
   return DEFAULT_CUSTOM_MESH;
 }
 
-// Two chained quadratic Bezier segments per row (see CustomMeshState
-// comment above): row[0..2] for u in [0, 0.5], row[2..4] for u in
-// [0.5, 1]. Passes exactly through the center anchor (row[2]) at u=0.5,
-// so it's always smooth and bounded by its own control points — no
-// overshoot — while still giving 3 real on-curve anchors per row.
 export function evalMeshRow(row: MeshPoint[], u: number): Point2D {
   if (!Array.isArray(row) || row.length < 5) {
     return { x: u, y: 0 };
@@ -246,9 +228,11 @@ export function pointsToEnvelopeMesh(points: MeshPoint[]): EnvelopeMeshState {
   };
 }
 
-// One-call transformer builder for the custom mesh — driven by the
-// two-segment quadratic Bezier row curve above.
-export function createCustomMeshTransformer(mesh: CustomMeshState = DEFAULT_CUSTOM_MESH) {
+// FIXED: Added optional bounds parameter to handle initial offset (minX, minY)
+export function createCustomMeshTransformer(
+  mesh: CustomMeshState = DEFAULT_CUSTOM_MESH,
+  bounds?: { minX: number; minY: number; width: number; height: number }
+) {
   const safeMesh = normalizeCustomMesh(mesh);
   const topRow = safeMesh.points.slice(0, 5);
   const bottomRow = safeMesh.points.slice(5, 10);
@@ -256,14 +240,21 @@ export function createCustomMeshTransformer(mesh: CustomMeshState = DEFAULT_CUST
   return (x: number, y: number, width: number, height: number) => {
     if (!width || !height) return { x, y };
 
-    const u = Math.min(Math.max(x / width, 0), 1);
-    const v = Math.min(Math.max(y / height, 0), 1);
+    const minX = bounds?.minX ?? 0;
+    const minY = bounds?.minY ?? 0;
+
+    const relX = x - minX;
+    const relY = y - minY;
+
+    const u = Math.min(Math.max(relX / width, 0), 1);
+    const v = Math.min(Math.max(relY / height, 0), 1);
+
     const top = evalMeshRow(topRow, u);
     const bottom = evalMeshRow(bottomRow, u);
 
     return {
-      x: safeNumber(lerp(top.x, bottom.x, v) * width, x),
-      y: safeNumber(lerp(top.y, bottom.y, v) * height, y),
+      x: safeNumber(minX + lerp(top.x, bottom.x, v) * width, x),
+      y: safeNumber(minY + lerp(top.y, bottom.y, v) * height, y),
     };
   };
 }
