@@ -52,7 +52,7 @@ export function WarpSvgPreview({
         viewBox={viewBox || `0 0 ${VIEWBOX_SIZE} ${VIEWBOX_SIZE}`}
         width="100%"
         height="100%"
-        preserveAspectRatio="xMidYMid meet"  
+        preserveAspectRatio="xMidYMid meet"
         style={{
           display: "block",
           maxWidth: "100%",

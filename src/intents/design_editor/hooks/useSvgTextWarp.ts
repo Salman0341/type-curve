@@ -1,7 +1,12 @@
 import { useMemo } from "react";
 import { useLoadedFont } from "./useLoadedFont";
-import { computeWarpedText, WarpEffect } from "../../../utils/warpTextCompute";
-import { CustomMeshState, DEFAULT_CUSTOM_MESH } from "../../../utils/customWarpMath";
+import type { WarpEffect } from "../../../utils/warpTextCompute";
+import { computeWarpedText } from "../../../utils/warpTextCompute";
+import type {
+  CustomMeshState} from "../../../utils/customWarpMath";
+import {
+  DEFAULT_CUSTOM_MESH,
+} from "../../../utils/customWarpMath";
 
 export type { WarpEffect };
 
@@ -25,22 +30,37 @@ export function useSvgTextWarp({
   fontUrl,
   customMesh = DEFAULT_CUSTOM_MESH,
 }: UseSvgTextWarpProps) {
-  const { font, isLoading: fontLoading, error: fontError } = useLoadedFont(fontUrl);
+  const {
+    font,
+    isLoading: fontLoading,
+    error: fontError,
+  } = useLoadedFont(fontUrl);
 
   const computed = useMemo(() => {
     if (!font || !text || !text.trim()) {
-      return { data: null as ReturnType<typeof computeWarpedText>, error: null as string | null };
+      return {
+        data: null as ReturnType<typeof computeWarpedText>,
+        error: null as string | null,
+      };
     }
     try {
-      return { data: computeWarpedText(font, text, effect, customMesh), error: null as string | null };
+      return {
+        data: computeWarpedText(font, text, effect, customMesh),
+        error: null as string | null,
+      };
     } catch (err: any) {
       console.error("Warp execution error:", err);
-      return { data: null as ReturnType<typeof computeWarpedText>, error: err?.message || "Failed to render path" };
+      return {
+        data: null as ReturnType<typeof computeWarpedText>,
+        error: err?.message || "Failed to render path",
+      };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [font, text, effect, JSON.stringify(customMesh)]);
 
-  const isLoading = fontLoading || (!!text?.trim() && !!font && !computed.data && !computed.error);
+  const isLoading =
+    fontLoading ||
+    (!!text?.trim() && !!font && !computed.data && !computed.error);
   const error = fontError || computed.error;
 
   return {

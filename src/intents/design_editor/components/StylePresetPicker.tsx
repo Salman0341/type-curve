@@ -1,8 +1,12 @@
 import React from "react";
 import { Carousel, Text } from "@canva/app-ui-kit";
 import { useLoadedFont } from "../hooks/useLoadedFont";
-import { computeWarpedText, WarpEffect } from "../../../utils/warpTextCompute";
+import type { WarpEffect } from "../../../utils/warpTextCompute";
+import { computeWarpedText } from "../../../utils/warpTextCompute";
 import type { CustomMeshState } from "../../../utils/customWarpMath";
+import type { FillColor } from "../../../utils/fillColor";
+import { DEFAULT_FILL_COLOR } from "../../../utils/fillColor";
+import { SvgGradientDef, getSvgFillAttr } from "../../../utils/svgGradientDefs";
 
 export interface PresetOption {
   id: string;
@@ -27,7 +31,7 @@ interface StylePresetPickerProps {
   onSelectEffect?: (effect: WarpEffect) => void;
   text: string;
   fontUrl: string;
-  color?: string;
+  color?: FillColor;
   customMesh?: CustomMeshState;
 }
 
@@ -36,7 +40,7 @@ export function StylePresetPicker({
   onSelectEffect,
   text,
   fontUrl,
-  color = "#000000",
+  color = DEFAULT_FILL_COLOR,
 }: StylePresetPickerProps) {
   const { font } = useLoadedFont(fontUrl);
 
@@ -51,7 +55,15 @@ export function StylePresetPicker({
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", boxSizing: "border-box" }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        width: "100%",
+        boxSizing: "border-box",
+      }}
+    >
       <Text size="small" variant="bold">
         Warp type
       </Text>
@@ -59,9 +71,8 @@ export function StylePresetPicker({
       <Carousel>
         {PRESETS.map((preset) => {
           const isSelected = selectedEffect === preset.effect;
+          const gradientId = `warp-preset-gradient-${preset.id}`;
 
-          // Custom Mesh never gets a live warp preview here — it always
-          // shows the static dashed-box icon, same as before.
           let pathData = "";
           let viewBox = "0 0 320 180";
           if (!preset.isCustom && font && text && text.trim()) {
@@ -139,11 +150,19 @@ export function StylePresetPicker({
               ) : (
                 <svg
                   viewBox={viewBox}
-                  style={{ width: "100%", height: "100%", display: "block", pointerEvents: "none" }}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    display: "block",
+                    pointerEvents: "none",
+                  }}
                   aria-label={preset.name}
                 >
+                  <defs>
+                    <SvgGradientDef color={color} id={gradientId} />
+                  </defs>
                   {pathData && !pathData.includes("NaN") && (
-                    <path d={pathData} fill={color} />
+                    <path d={pathData} fill={getSvgFillAttr(color, gradientId)} />
                   )}
                 </svg>
               )}

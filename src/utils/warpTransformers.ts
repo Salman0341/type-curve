@@ -5,7 +5,10 @@ export interface TextBounds {
   maxY: number;
 }
 
-export type PointTransformer = (x: number, y: number) => { x: number; y: number };
+export type PointTransformer = (
+  x: number,
+  y: number,
+) => { x: number; y: number };
 
 /**
  * 1. Bulge / Spherize Transformer (Preset 1)
@@ -34,7 +37,9 @@ export function createBulgeTransformer(bounds: TextBounds): PointTransformer {
 /**
  * 2. Perspective Shrink - Left Extreme Tall, Right Small (Preset 2 - Matching d2_2.png)
  */
-export function createRiseDecreaseTransformer(bounds: TextBounds): PointTransformer {
+export function createRiseDecreaseTransformer(
+  bounds: TextBounds,
+): PointTransformer {
   const width = Math.max(bounds.maxX - bounds.minX, 1);
   const minX = bounds.minX;
   const cy = (bounds.minY + bounds.maxY) / 2;
@@ -62,7 +67,9 @@ export function createRiseDecreaseTransformer(bounds: TextBounds): PointTransfor
 /**
  * 3. Perspective Grow - Left Small, Right Extreme Tall (Preset 3 - Matching d3.png)
  */
-export function createRiseIncreaseTransformer(bounds: TextBounds): PointTransformer {
+export function createRiseIncreaseTransformer(
+  bounds: TextBounds,
+): PointTransformer {
   const width = Math.max(bounds.maxX - bounds.minX, 1);
   const minX = bounds.minX;
   const cy = (bounds.minY + bounds.maxY) / 2;

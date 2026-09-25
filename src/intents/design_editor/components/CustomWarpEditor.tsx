@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { Button } from "@canva/app-ui-kit";
+import {Button} from '@canva/app-ui-kit';
 import { ArrowLeftIcon } from "@canva/app-ui-kit/icons";
 import {
   CustomMeshState,
@@ -8,6 +8,9 @@ import {
   normalizeCustomMesh,
   evalMeshRow,
 } from "../../../utils/customWarpMath";
+import type { FillColor } from "../../../utils/fillColor";
+import { DEFAULT_FILL_COLOR } from "../../../utils/fillColor";
+import { SvgGradientDef, getSvgFillAttr } from "../../../utils/svgGradientDefs";
 
 interface CustomWarpEditorProps {
   text?: string;
@@ -16,7 +19,7 @@ interface CustomWarpEditorProps {
   isLoading?: boolean;
   error?: string | null;
   mesh?: CustomMeshState;
-  color?: string;
+  color?: FillColor;
   onMeshChange?: (newMesh: CustomMeshState) => void;
   onBack?: () => void;
 }
@@ -31,11 +34,11 @@ interface Box {
 const ANCHOR_INDICES = new Set([0, 2, 4, 5, 7, 9]);
 const HANDLE_INDICES = new Set([1, 3, 6, 8]);
 const HANDLE_LINKS: Array<[number, number]> = [
-  [2, 1],
-  [2, 3],
-  [7, 6],
-  [7, 8],
+  [2, 1], [2, 3],
+  [7, 6], [7, 8],
 ];
+
+const EDITOR_GRADIENT_ID = "warp-editor-gradient";
 
 function estimateTextBox(text: string | undefined): Box {
   const safeText = text?.trim() || "HELLO, WORLD!";
@@ -51,7 +54,7 @@ function hasUsableBounds(bounds: Box | null | undefined): bounds is Box {
       Number.isFinite(bounds.x) &&
       Number.isFinite(bounds.y) &&
       bounds.w > 0 &&
-      bounds.h > 0
+      bounds.h > 0,
   );
 }
 
@@ -73,7 +76,7 @@ export function CustomWarpEditor({
   isLoading = false,
   error = null,
   mesh,
-  color = "#000000",
+  color = DEFAULT_FILL_COLOR,
   onMeshChange,
   onBack,
 }: CustomWarpEditorProps) {
@@ -96,13 +99,9 @@ export function CustomWarpEditor({
     hasUsableBounds(textBounds) ? textBounds : estimateTextBox(text)
   );
 
-  // FIXED: Real bounds aate hi mesh state ko auto-trigger karke initial warp compute karein
   useEffect(() => {
     if (hasUsableBounds(textBounds)) {
       setNaturalBox(textBounds);
-      if (typeof onMeshChange === "function") {
-        onMeshChange(safeMesh);
-      }
     }
   }, [textBounds]);
 
@@ -233,7 +232,7 @@ export function CustomWarpEditor({
     <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 12, boxSizing: "border-box" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <Button
-          icon={ArrowLeftIcon}
+          icon={ArrowLeftIcon }
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -249,7 +248,7 @@ export function CustomWarpEditor({
             padding: 0,
           }}
         >
-          Warp Editor
+        Warp Editor
         </Button>
         <span style={{ fontSize: 12, color: "#666" }}>Drag points to warp</span>
       </div>
@@ -280,19 +279,20 @@ export function CustomWarpEditor({
             userSelect: "none",
           }}
         >
+          <defs>
+            <SvgGradientDef color={color} id={EDITOR_GRADIENT_ID} />
+          </defs>
+
           {canUseWarpedPath ? (
-            <path d={pathData} fill={color} />
+            <path d={pathData} fill={getSvgFillAttr(color, EDITOR_GRADIENT_ID)} />
           ) : (
-            // FIXED: textLength and lengthAdjust added to keep fallback text contained inside naturalBox
             <text
               ref={fallbackTextRef}
               x={naturalBox.x}
-              y={naturalBox.y + naturalBox.h * 0.85}
-              textLength={naturalBox.w}
-              lengthAdjust="spacingAndGlyphs"
-              fill={color}
+              y={naturalBox.y + naturalBox.h * 0.93}
+              fill={getSvgFillAttr(color, EDITOR_GRADIENT_ID)}
               fontFamily="Arial Black, Arial, sans-serif"
-              fontSize={naturalBox.h * 0.85}
+              fontSize={naturalBox.h * 1.35}
               fontWeight={900}
             >
               {text}

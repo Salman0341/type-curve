@@ -8,15 +8,18 @@ import {
 import type { WarpStyle, OutlineVariant } from "./strokeStyle";
 import { computeRenderStyle } from "./strokeStyle";
 import type { WarpEffect } from "../intents/design_editor/hooks/useSvgTextWarp";
+import type {
+  CustomMeshState} from "./customWarpMath";
 import {
-  CustomMeshState,
   DEFAULT_CUSTOM_MESH,
   createCustomMeshTransformer,
 } from "./customWarpMath";
+import type { FillColor } from "./fillColor";
+import { toRepresentativeHex, toSvgFill } from "./fillColor";
 
 export interface WarpRenderArgs {
   text: string;
-  color: string;
+  color: FillColor;
   thickness: number;
   style: WarpStyle;
   variant: OutlineVariant;
@@ -42,9 +45,16 @@ export async function buildExportSvgMarkup(
     let transformPoint: (x: number, y: number) => { x: number; y: number };
 
     if (effect === "custom") {
-      const meshTransform = createCustomMeshTransformer(args.customMesh ?? DEFAULT_CUSTOM_MESH);
+      const meshTransform = createCustomMeshTransformer(
+        args.customMesh ?? DEFAULT_CUSTOM_MESH,
+      );
       transformPoint = (x: number, y: number) => {
-        const res = meshTransform(x - naturalBB.x1, y - naturalBB.y1, naturalWidth, naturalHeight);
+        const res = meshTransform(
+          x - naturalBB.x1,
+          y - naturalBB.y1,
+          naturalWidth,
+          naturalHeight,
+        );
         return { x: naturalBB.x1 + res.x, y: naturalBB.y1 + res.y };
       };
     } else {
@@ -58,8 +68,8 @@ export async function buildExportSvgMarkup(
         effect === "rise-decrease"
           ? createRiseDecreaseTransformer(bounds)
           : effect === "rise-increase"
-          ? createRiseIncreaseTransformer(bounds)
-          : createBulgeTransformer(bounds);
+            ? createRiseIncreaseTransformer(bounds)
+            : createBulgeTransformer(bounds);
       transformPoint = (x: number, y: number) => sideTransform(x, y);
     }
 
@@ -90,19 +100,27 @@ export async function buildExportSvgMarkup(
   const width = Math.max(warpedBB.x2 - warpedBB.x1, 1);
   const height = Math.max(warpedBB.y2 - warpedBB.y1, 1);
 
-  const renderStyle = computeRenderStyle(args.style, args.variant, args.thickness);
-  const fillColor = args.color || "#000000";
+  const renderStyle = computeRenderStyle(
+    args.style,
+    args.variant,
+    args.thickness,
+  );
+
+  const strokeColor = toRepresentativeHex(args.color);
+  const gradientId = "warp-export-gradient";
+  const { fillAttr, defsMarkup } = toSvgFill(args.color, gradientId);
 
   const strokeElements = !renderStyle.isSolid
     ? renderStyle.layers
         .map(
           (layer) =>
-            `<path d="${d}" fill="none" stroke="${fillColor}" stroke-opacity="${layer.strokeOpacity}" stroke-width="${layer.strokeWidth}" stroke-linejoin="${renderStyle.strokeLinejoin}" stroke-dasharray="${renderStyle.strokeDasharray}" />`,
+            `<path d="${d}" fill="none" stroke="${strokeColor}" stroke-opacity="${layer.strokeOpacity}" stroke-width="${layer.strokeWidth}" stroke-linejoin="${renderStyle.strokeLinejoin}" stroke-dasharray="${renderStyle.strokeDasharray}" />`,
         )
         .join("")
     : "";
 
-  const fillElement = `<path d="${d}" fill="${fillColor}" />`;
+  const fillElement = `<path d="${d}" fill="${fillAttr}" />`;
+  const defsElement = defsMarkup ? `<defs>${defsMarkup}</defs>` : "";
 
   const padding = Math.max(width, height) * 0.06 + 6;
   const vbX = warpedBB.x1 - padding;
@@ -113,7 +131,7 @@ export async function buildExportSvgMarkup(
   const exportW = Math.round(vbW * 3);
   const exportH = Math.round(vbH * 3);
 
-  const svgMarkup = `<svg xmlns="http://www.w3.org/2000/svg" width="${exportW}" height="${exportH}" viewBox="${vbX} ${vbY} ${vbW} ${vbH}">${strokeElements}${fillElement}</svg>`;
+  const svgMarkup = `<svg xmlns="http://www.w3.org/2000/svg" width="${exportW}" height="${exportH}" viewBox="${vbX} ${vbY} ${vbW} ${vbH}">${defsElement}${strokeElements}${fillElement}</svg>`;
 
   return { svgMarkup, width: exportW, height: exportH };
 }

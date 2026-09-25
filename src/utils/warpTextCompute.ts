@@ -1,6 +1,7 @@
-import opentype from "opentype.js";
+import type opentype from "opentype.js";
+import type {
+  CustomMeshState} from "./customWarpMath";
 import {
-  CustomMeshState,
   DEFAULT_CUSTOM_MESH,
   createCustomMeshTransformer,
 } from "./customWarpMath";
@@ -80,13 +81,18 @@ export function computeWarpedText(
       return c;
     });
   } else {
-    const bounds: TextBounds = { minX: bb.x1, maxX: bb.x2, minY: bb.y1, maxY: bb.y2 };
+    const bounds: TextBounds = {
+      minX: bb.x1,
+      maxX: bb.x2,
+      minY: bb.y1,
+      maxY: bb.y2,
+    };
     const pointTransform =
       effect === "rise-decrease"
         ? createRiseDecreaseTransformer(bounds)
         : effect === "rise-increase"
-        ? createRiseIncreaseTransformer(bounds)
-        : createBulgeTransformer(bounds);
+          ? createRiseIncreaseTransformer(bounds)
+          : createBulgeTransformer(bounds);
 
     path.commands = path.commands.map((cmd: any) => {
       const c = { ...cmd };
@@ -114,7 +120,7 @@ export function computeWarpedText(
   const warpedHeight = Math.max(warpedBB.y2 - warpedBB.y1, 10);
   const padding = 20;
   const viewBox = `${Math.floor(warpedBB.x1 - padding)} ${Math.floor(
-    warpedBB.y1 - padding
+    warpedBB.y1 - padding,
   )} ${Math.floor(warpedWidth + padding * 2)} ${Math.floor(warpedHeight + padding * 2)}`;
 
   return {

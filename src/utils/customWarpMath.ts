@@ -22,24 +22,44 @@ export interface CustomMeshState {
 
 // 2. Default State Fallbacks
 export const DEFAULT_ENVELOPE_MESH: EnvelopeMeshState = {
-  top: { p0: { x: 0, y: 0 }, c1: { x: 0.33, y: 0 }, c2: { x: 0.66, y: 0 }, p1: { x: 1, y: 0 } },
-  bottom: { p0: { x: 0, y: 1 }, c1: { x: 0.33, y: 1 }, c2: { x: 0.66, y: 1 }, p1: { x: 1, y: 1 } },
-  left: { p0: { x: 0, y: 0 }, c1: { x: 0, y: 0.33 }, c2: { x: 0, y: 0.66 }, p1: { x: 0, y: 1 } },
-  right: { p0: { x: 1, y: 0 }, c1: { x: 1, y: 0.33 }, c2: { x: 1, y: 0.66 }, p1: { x: 1, y: 1 } },
+  top: {
+    p0: { x: 0, y: 0 },
+    c1: { x: 0.33, y: 0 },
+    c2: { x: 0.66, y: 0 },
+    p1: { x: 1, y: 0 },
+  },
+  bottom: {
+    p0: { x: 0, y: 1 },
+    c1: { x: 0.33, y: 1 },
+    c2: { x: 0.66, y: 1 },
+    p1: { x: 1, y: 1 },
+  },
+  left: {
+    p0: { x: 0, y: 0 },
+    c1: { x: 0, y: 0.33 },
+    c2: { x: 0, y: 0.66 },
+    p1: { x: 0, y: 1 },
+  },
+  right: {
+    p0: { x: 1, y: 0 },
+    c1: { x: 1, y: 0.33 },
+    c2: { x: 1, y: 0.66 },
+    p1: { x: 1, y: 1 },
+  },
 };
 
 export const DEFAULT_CUSTOM_MESH: CustomMeshState = {
   points: [
-    { x: 0, y: 0 },    // 0 top-left anchor
+    { x: 0, y: 0 }, // 0 top-left anchor
     { x: 0.25, y: 0 }, // 1 top-left handle
-    { x: 0.5, y: 0 },  // 2 top-center anchor
+    { x: 0.5, y: 0 }, // 2 top-center anchor
     { x: 0.75, y: 0 }, // 3 top-right handle
-    { x: 1, y: 0 },    // 4 top-right anchor
-    { x: 0, y: 1 },    // 5 bottom-left anchor
+    { x: 1, y: 0 }, // 4 top-right anchor
+    { x: 0, y: 1 }, // 5 bottom-left anchor
     { x: 0.25, y: 1 }, // 6 bottom-left handle
-    { x: 0.5, y: 1 },  // 7 bottom-center anchor
+    { x: 0.5, y: 1 }, // 7 bottom-center anchor
     { x: 0.75, y: 1 }, // 8 bottom-right handle
-    { x: 1, y: 1 },    // 9 bottom-right anchor
+    { x: 1, y: 1 }, // 9 bottom-right anchor
   ],
 };
 
@@ -48,7 +68,13 @@ export function safeNumber(val: number, fallback = 0): number {
   return Number.isFinite(val) ? val : fallback;
 }
 
-function evalCubicBezier(p0: Point2D, c1: Point2D, c2: Point2D, p1: Point2D, t: number): Point2D {
+function evalCubicBezier(
+  p0: Point2D,
+  c1: Point2D,
+  c2: Point2D,
+  p1: Point2D,
+  t: number,
+): Point2D {
   const mt = 1 - t;
   const mt2 = mt * mt;
   const mt3 = mt2 * mt;
@@ -61,7 +87,12 @@ function evalCubicBezier(p0: Point2D, c1: Point2D, c2: Point2D, p1: Point2D, t: 
   };
 }
 
-function evalQuadraticBezier(p0: Point2D, c: Point2D, p1: Point2D, t: number): Point2D {
+function evalQuadraticBezier(
+  p0: Point2D,
+  c: Point2D,
+  p1: Point2D,
+  t: number,
+): Point2D {
   const mt = 1 - t;
   return {
     x: mt * mt * p0.x + 2 * mt * t * c.x + t * t * p1.x,
@@ -70,7 +101,9 @@ function evalQuadraticBezier(p0: Point2D, c: Point2D, p1: Point2D, t: number): P
 }
 
 // 4. Transform Math Engine
-export function createEnvelopeTransformer(mesh: EnvelopeMeshState = DEFAULT_ENVELOPE_MESH) {
+export function createEnvelopeTransformer(
+  mesh: EnvelopeMeshState = DEFAULT_ENVELOPE_MESH,
+) {
   const safeMesh = mesh && mesh.top ? mesh : DEFAULT_ENVELOPE_MESH;
 
   return (x: number, y: number, width: number, height: number) => {
@@ -79,10 +112,34 @@ export function createEnvelopeTransformer(mesh: EnvelopeMeshState = DEFAULT_ENVE
     const u = Math.min(Math.max(x / width, 0), 1);
     const v = Math.min(Math.max(y / height, 0), 1);
 
-    const topPt = evalCubicBezier(safeMesh.top.p0, safeMesh.top.c1, safeMesh.top.c2, safeMesh.top.p1, u);
-    const botPt = evalCubicBezier(safeMesh.bottom.p0, safeMesh.bottom.c1, safeMesh.bottom.c2, safeMesh.bottom.p1, u);
-    const leftPt = evalCubicBezier(safeMesh.left.p0, safeMesh.left.c1, safeMesh.left.c2, safeMesh.left.p1, v);
-    const rightPt = evalCubicBezier(safeMesh.right.p0, safeMesh.right.c1, safeMesh.right.c2, safeMesh.right.p1, v);
+    const topPt = evalCubicBezier(
+      safeMesh.top.p0,
+      safeMesh.top.c1,
+      safeMesh.top.c2,
+      safeMesh.top.p1,
+      u,
+    );
+    const botPt = evalCubicBezier(
+      safeMesh.bottom.p0,
+      safeMesh.bottom.c1,
+      safeMesh.bottom.c2,
+      safeMesh.bottom.p1,
+      u,
+    );
+    const leftPt = evalCubicBezier(
+      safeMesh.left.p0,
+      safeMesh.left.c1,
+      safeMesh.left.c2,
+      safeMesh.left.p1,
+      v,
+    );
+    const rightPt = evalCubicBezier(
+      safeMesh.right.p0,
+      safeMesh.right.c1,
+      safeMesh.right.c2,
+      safeMesh.right.p1,
+      v,
+    );
 
     const cornerP00 = safeMesh.top.p0;
     const cornerP10 = safeMesh.top.p1;
@@ -101,8 +158,18 @@ export function createEnvelopeTransformer(mesh: EnvelopeMeshState = DEFAULT_ENVE
       (1 - u) * v * cornerP01.y +
       u * v * cornerP11.y;
 
-    const finalX = (1 - v) * topPt.x + v * botPt.x + (1 - u) * leftPt.x + u * rightPt.x - bilinearX;
-    const finalY = (1 - v) * topPt.y + v * botPt.y + (1 - u) * leftPt.y + u * rightPt.y - bilinearY;
+    const finalX =
+      (1 - v) * topPt.x +
+      v * botPt.x +
+      (1 - u) * leftPt.x +
+      u * rightPt.x -
+      bilinearX;
+    const finalY =
+      (1 - v) * topPt.y +
+      v * botPt.y +
+      (1 - u) * leftPt.y +
+      u * rightPt.y -
+      bilinearY;
 
     return {
       x: safeNumber(finalX * width, x),
@@ -112,14 +179,22 @@ export function createEnvelopeTransformer(mesh: EnvelopeMeshState = DEFAULT_ENVE
 }
 
 // 5. Convert 8 draggable points -> EnvelopeMeshState
-function quadControlFromMidpoint(p0: Point2D, mid: Point2D, p1: Point2D): Point2D {
+function quadControlFromMidpoint(
+  p0: Point2D,
+  mid: Point2D,
+  p1: Point2D,
+): Point2D {
   return {
     x: 2 * mid.x - 0.5 * p0.x - 0.5 * p1.x,
     y: 2 * mid.y - 0.5 * p0.y - 0.5 * p1.y,
   };
 }
 
-function cubicFromQuad(p0: Point2D, q: Point2D, p1: Point2D): { c1: Point2D; c2: Point2D } {
+function cubicFromQuad(
+  p0: Point2D,
+  q: Point2D,
+  p1: Point2D,
+): { c1: Point2D; c2: Point2D } {
   return {
     c1: { x: p0.x + (2 / 3) * (q.x - p0.x), y: p0.y + (2 / 3) * (q.y - p0.y) },
     c2: { x: p1.x + (2 / 3) * (q.x - p1.x), y: p1.y + (2 / 3) * (q.y - p1.y) },
@@ -231,7 +306,7 @@ export function pointsToEnvelopeMesh(points: MeshPoint[]): EnvelopeMeshState {
 // FIXED: Added optional bounds parameter to handle initial offset (minX, minY)
 export function createCustomMeshTransformer(
   mesh: CustomMeshState = DEFAULT_CUSTOM_MESH,
-  bounds?: { minX: number; minY: number; width: number; height: number }
+  bounds?: { minX: number; minY: number; width: number; height: number },
 ) {
   const safeMesh = normalizeCustomMesh(mesh);
   const topRow = safeMesh.points.slice(0, 5);

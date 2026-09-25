@@ -5,26 +5,21 @@ import {
   SegmentedControl,
   FormField,
   Select,
-  Swatch,
 } from "@canva/app-ui-kit";
-import type { Anchor, ColorSelectionEvent, ColorSelectionScope } from "@canva/asset";
-import { openColorSelector } from "@canva/asset";
 import { StylePresetPicker } from "./StylePresetPicker";
 import { CustomWarpEditor } from "./CustomWarpEditor";
+import { GradientColorField } from "./GradientColorField";
 import { useSvgTextWarp, WarpEffect } from "../hooks/useSvgTextWarp";
 import { useAddTextWarpToDesign } from "../hooks/useAddTextWarpToDesign";
 import { useEditableTextWarp } from "../hooks/useEditableTextWarp";
 import { DEFAULT_CUSTOM_MESH, CustomMeshState } from "../../../utils/customWarpMath";
+import type { FillColor } from "../../../utils/fillColor";
+import { DEFAULT_FILL_COLOR } from "../../../utils/fillColor";
+import { SvgGradientDef, getSvgFillAttr } from "../../../utils/svgGradientDefs";
 
 type PanelTab = "general" | "style";
 type AddMode = "editable" | "image";
 
-// NOTE: 3 of these (Open Sans, Montserrat, Cinzel) are variable-font URLs
-// (the %5Bwght%5D part). These use the same GSUB table type that crashed
-// earlier with Inter ("substFormat: 2 is not yet supported") — if any of
-// these three crash the same way, that's confirmed why, and the fix is the
-// same: swap that one entry for a static-weight file (like we did for
-// Inter -> Roboto).
 const FONT_FAMILY_OPTIONS = [
   { value: "roboto", label: "Roboto (Sans-Serif)", url: "https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxP.ttf" },
   { value: "open-sans", label: "Open Sans", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/opensans/OpenSans%5Bwdth%2Cwght%5D.ttf" },
@@ -40,10 +35,12 @@ const FONT_FAMILY_OPTIONS = [
   { value: "satisfy", label: "Satisfy", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/apache/satisfy/Satisfy-Regular.ttf" },
 ];
 
+const PREVIEW_GRADIENT_ID = "warp-preview-gradient";
+
 export function TextWarpPanel() {
   const [text, setText] = useState("HELLO, WORLD!");
   const [effect, setEffect] = useState<WarpEffect>("bulge");
-  const [color, setColor] = useState("#000000");
+  const [color, setColor] = useState<FillColor>(DEFAULT_FILL_COLOR);
   const [customMesh, setCustomMesh] = useState<CustomMeshState>(DEFAULT_CUSTOM_MESH);
   const [activeTab, setActiveTab] = useState<PanelTab>("general");
   const [fontFamily, setFontFamily] = useState("roboto");
@@ -54,7 +51,6 @@ export function TextWarpPanel() {
     [fontFamily],
   );
 
-  // SVG rendering hook
   const { pathData, viewBox, textBounds, isLoading, error } = useSvgTextWarp({
     text,
     effect,
@@ -62,7 +58,9 @@ export function TextWarpPanel() {
     customMesh,
   });
 
-  // "Image" mode — simple, non-editable
+  // color is now passed through AS a FillColor (solid or gradient) —
+  // buildWarpedImage.ts's WarpRenderArgs.color must accept FillColor too
+  // (see earlier message) for this to reach the exported image.
   const { addToDesign, isAdding: isAddingImage } = useAddTextWarpToDesign({
     text,
     color,
@@ -74,45 +72,26 @@ export function TextWarpPanel() {
     fontUrl,
   });
 
-  // "Editable" mode — creates/updates a real Canva App Element and tells us
-  // when one is selected on the canvas, so we can restore the panel.
-  // This REPLACES the old selection.registerOnChange + appElementData hack,
-  // which never actually persisted any data (addElementAtPoint has no
-  // concept of custom data — that's what the "undefined is not a valid
-  // selection scope" error and the silent restore-failure both traced back
-  // to).
   const { addOrUpdate, isAdding: isAddingEditable, selectedData, isEditingExisting } =
     useEditableTextWarp();
 
-  // Fires only for elements THIS app created as an editable App Element —
-  // a plain "Image" mode element can never trigger this, so switching
-  // between the two modes never conflicts with restoring state.
   useEffect(() => {
     if (!selectedData) return;
     setMode("editable");
     setText(selectedData.text);
-    setColor(selectedData.color);
+    // Handles old saved elements that still have a plain string color
+    // (from before this change), as well as new FillColor ones.
+    setColor(
+      typeof selectedData.color === "string"
+        ? { type: "solid", hexString: selectedData.color }
+        : (selectedData.color as unknown as FillColor),
+    );
     setEffect(selectedData.effect);
     setCustomMesh(selectedData.customMesh);
     if (FONT_FAMILY_OPTIONS.some((opt) => opt.value === selectedData.fontFamily)) {
       setFontFamily(selectedData.fontFamily);
     }
   }, [selectedData]);
-
-  const onColorSelect = async <T extends ColorSelectionScope>(
-    event: ColorSelectionEvent<T>,
-  ) => {
-    if (event.selection.type === "solid") {
-      setColor(event.selection.hexString);
-    }
-  };
-
-  const onRequestOpenColorSelector = (boundingRect: Anchor) => {
-    openColorSelector(boundingRect, {
-      onColorSelect,
-      scopes: ["solid"],
-    });
-  };
 
   const handleAddOrUpdate = () => {
     if (mode === "image") {
@@ -138,6 +117,8 @@ export function TextWarpPanel() {
     : mode === "editable" && isEditingExisting
     ? "Update design"
     : "Add to design";
+
+  console.log('Checked ', color);  
 
   return (
     <div
@@ -185,11 +166,11 @@ export function TextWarpPanel() {
           ) : error ? (
             <span style={{ fontSize: "13px", color: "red" }}>Error: {error}</span>
           ) : pathData ? (
-            <svg
-              viewBox={viewBox}
-              style={{ width: "100%", height: "100%", display: "block" }}
-            >
-              <path d={pathData} fill={color} />
+            <svg viewBox={viewBox} style={{ width: "100%", height: "100%", display: "block" }}>
+              <defs>
+                <SvgGradientDef color={color} id={PREVIEW_GRADIENT_ID} />
+              </defs>
+              <path d={pathData} fill={getSvgFillAttr(color, PREVIEW_GRADIENT_ID)} />
             </svg>
           ) : (
             <span style={{ fontSize: "13px", color: "#999" }}>Type text to preview</span>
@@ -222,14 +203,7 @@ export function TextWarpPanel() {
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           <FormField
             label="Color"
-            control={() => (
-              <Swatch
-                fill={[color]}
-                onClick={(e) =>
-                  onRequestOpenColorSelector(e.currentTarget.getBoundingClientRect())
-                }
-              />
-            )}
+            control={() => <GradientColorField value={color} onChange={setColor} />}
           />
           <FormField
             label="Select Web Font"

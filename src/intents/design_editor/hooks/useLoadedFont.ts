@@ -34,9 +34,11 @@ async function fetchAndParseFont(fontUrl: string): Promise<opentype.Font> {
 
     // Direct opentype parsing from ArrayBuffer
     const parsedFont = opentype.parse(arrayBuffer);
-    
+
     if (!parsedFont || !parsedFont.supported) {
-      throw new Error("Unsupported font format (Ensure it is TTF, OTF, or WOFF1. WOFF2 is not supported by opentype.js)");
+      throw new Error(
+        "Unsupported font format (Ensure it is TTF, OTF, or WOFF1. WOFF2 is not supported by opentype.js)",
+      );
     }
 
     return parsedFont;
@@ -49,7 +51,9 @@ async function fetchAndParseFont(fontUrl: string): Promise<opentype.Font> {
 
     // Catch Network/CORS failures explicitly
     if (err instanceof TypeError && err.message.includes("Failed to fetch")) {
-      throw new Error(`CORS or Network failure when fetching font from: ${fontUrl}`);
+      throw new Error(
+        `CORS or Network failure when fetching font from: ${fontUrl}`,
+      );
     }
 
     throw err;
