@@ -8,8 +8,7 @@ import {
 import type { WarpStyle, OutlineVariant } from "./strokeStyle";
 import { computeRenderStyle } from "./strokeStyle";
 import type { WarpEffect } from "../intents/design_editor/hooks/useSvgTextWarp";
-import type {
-  CustomMeshState} from "./customWarpMath";
+import type { CustomMeshState } from "./customWarpMath";
 import {
   DEFAULT_CUSTOM_MESH,
   createCustomMeshTransformer,
@@ -107,20 +106,24 @@ export async function buildExportSvgMarkup(
   );
 
   const strokeColor = toRepresentativeHex(args.color);
-  const gradientId = "warp-export-gradient";
+
+  // Unique ID generator taake SVGs clashes na ho
+  const gradientId = `warp-export-gradient-${Math.random().toString(36).substring(2, 9)}`;
   const { fillAttr, defsMarkup } = toSvgFill(args.color, gradientId);
 
-  const strokeElements = !renderStyle.isSolid
-    ? renderStyle.layers
-        .map(
-          (layer) =>
-            `<path d="${d}" fill="none" stroke="${strokeColor}" stroke-opacity="${layer.strokeOpacity}" stroke-width="${layer.strokeWidth}" stroke-linejoin="${renderStyle.strokeLinejoin}" stroke-dasharray="${renderStyle.strokeDasharray}" />`,
-        )
-        .join("")
-    : "";
+  // Stroke tabhi draw hoga jab thickness > 0 ho
+  const strokeElements =
+    !renderStyle.isSolid && args.thickness > 0
+      ? renderStyle.layers
+          .map(
+            (layer) =>
+              `<path d="${d}" fill="none" stroke="${strokeColor}" stroke-opacity="${layer.strokeOpacity}" stroke-width="${layer.strokeWidth}" stroke-linejoin="${renderStyle.strokeLinejoin}" stroke-dasharray="${renderStyle.strokeDasharray}" />`,
+          )
+          .join("")
+      : "";
 
   const fillElement = `<path d="${d}" fill="${fillAttr}" />`;
-  const defsElement = defsMarkup ? `<defs>${defsMarkup}</defs>` : "";
+  const defsSection = defsMarkup ? `<defs>${defsMarkup}</defs>` : "";
 
   const padding = Math.max(width, height) * 0.06 + 6;
   const vbX = warpedBB.x1 - padding;
@@ -131,7 +134,7 @@ export async function buildExportSvgMarkup(
   const exportW = Math.round(vbW * 3);
   const exportH = Math.round(vbH * 3);
 
-  const svgMarkup = `<svg xmlns="http://www.w3.org/2000/svg" width="${exportW}" height="${exportH}" viewBox="${vbX} ${vbY} ${vbW} ${vbH}">${defsElement}${strokeElements}${fillElement}</svg>`;
+  const svgMarkup = `<svg xmlns="http://www.w3.org/2000/svg" width="${exportW}" height="${exportH}" viewBox="${vbX} ${vbY} ${vbW} ${vbH}">${defsSection}<g>${fillElement}${strokeElements}</g></svg>`;
 
   return { svgMarkup, width: exportW, height: exportH };
 }

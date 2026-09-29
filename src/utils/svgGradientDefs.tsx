@@ -1,4 +1,3 @@
-// src/utils/svgGradientDefs.tsx
 import React from "react";
 import type { FillColor } from "./fillColor";
 import { isGradient } from "./fillColor";
@@ -18,17 +17,17 @@ export function SvgGradientDef({ color, id }: { color: FillColor; id: string }) 
 
   if (color.shape === "radial") {
     return (
-      <radialGradient id={id} cx="50%" cy="50%" r="50%">
+      <radialGradient id={id} cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
         {stopEls}
       </radialGradient>
     );
   }
 
-  const rad = ((color.angle - 90) * Math.PI) / 180;
-  const x1 = 50 - Math.cos(rad) * 50;
-  const y1 = 50 - Math.sin(rad) * 50;
-  const x2 = 50 + Math.cos(rad) * 50;
-  const y2 = 50 + Math.sin(rad) * 50;
+  const rad = ((color.angle ?? 90) * Math.PI) / 180;
+  const x1 = Math.round(50 - Math.cos(rad) * 50);
+  const y1 = Math.round(50 - Math.sin(rad) * 50);
+  const x2 = Math.round(50 + Math.cos(rad) * 50);
+  const y2 = Math.round(50 + Math.sin(rad) * 50);
 
   return (
     <linearGradient id={id} x1={`${x1}%`} y1={`${y1}%`} x2={`${x2}%`} y2={`${y2}%`}>

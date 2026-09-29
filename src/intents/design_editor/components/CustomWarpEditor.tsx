@@ -59,8 +59,15 @@ function hasUsableBounds(bounds: Box | null | undefined): bounds is Box {
 }
 
 function padToEditorBox(natural: Box): Box {
-  const marginX = natural.w * 0.35;
-  const marginY = Math.max(natural.h * 1.5, natural.w * 0.12);
+  // The SVG already has preserveAspectRatio="xMidYMid meet" inside a
+  // square container, so an overly flat/wide box (natural for one line
+  // of text) gets letterboxed into a thin horizontal strip with lots of
+  // empty space above/below — that's the "doesn't fit properly" look
+  // during the loading/estimate phase, before real font metrics arrive.
+  // A larger vertical margin keeps the box closer to square so it fills
+  // the canvas nicely even before the measurement effect corrects it.
+  const marginX = natural.w * 0.3;
+  const marginY = Math.max(natural.h * 3, natural.w * 0.28);
   return {
     x: natural.x - marginX,
     y: natural.y - marginY,

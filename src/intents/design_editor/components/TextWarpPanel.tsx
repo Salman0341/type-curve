@@ -25,11 +25,8 @@ const FONT_FAMILY_OPTIONS = [
   { value: "open-sans", label: "Open Sans", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/opensans/OpenSans%5Bwdth%2Cwght%5D.ttf" },
   { value: "poppins-bold", label: "Poppins Bold", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/poppins/Poppins-Bold.ttf" },
   { value: "lato", label: "Lato", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/lato/Lato-Regular.ttf" },
-  { value: "montserrat", label: "Montserrat", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/montserrat/Montserrat%5Bwght%5D.ttf" },
-  { value: "bebas-neue", label: "Bebas Neue", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/bebasneue/BebasNeue-Regular.ttf" },
   { value: "righteous", label: "Righteous", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/righteous/Righteous-Regular.ttf" },
   { value: "abril-fatface", label: "Abril Fatface", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/abrilfatface/AbrilFatface-Regular.ttf" },
-  { value: "cinzel", label: "Cinzel", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/cinzel/Cinzel%5Bwght%5D.ttf" },
   { value: "shadows-into-light", label: "Shadows Into Light", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/shadowsintolight/ShadowsIntoLight.ttf" },
   { value: "permanent-marker", label: "Permanent Marker", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/apache/permanentmarker/PermanentMarker-Regular.ttf" },
   { value: "satisfy", label: "Satisfy", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/apache/satisfy/Satisfy-Regular.ttf" },
@@ -117,8 +114,6 @@ export function TextWarpPanel() {
     : mode === "editable" && isEditingExisting
     ? "Update design"
     : "Add to design";
-
-  console.log('Checked ', color);  
 
   return (
     <div
@@ -229,13 +224,18 @@ export function TextWarpPanel() {
         />
       </div>
 
-      <SegmentedControl
-        options={[
-          { value: "editable", label: "Editable" },
-          { value: "image", label: "Image" },
-        ]}
-        value={mode}
-        onChange={(value) => setMode(value as AddMode)}
+      <FormField
+        label="Type"
+        control={() => (
+          <SegmentedControl
+            options={[
+              { value: "editable", label: "Editable" },
+              { value: "image", label: "Image" },
+            ]}
+            value={mode}
+            onChange={(value) => setMode(value as AddMode)}
+          />
+        )}
       />
 
       <Button onClick={handleAddOrUpdate} disabled={isAdding || !text.trim()} variant="primary">
