@@ -5,6 +5,7 @@ import {
   SegmentedControl,
   FormField,
   Select,
+  Slider,
 } from "@canva/app-ui-kit";
 import { StylePresetPicker } from "./StylePresetPicker";
 import { CustomWarpEditor } from "./CustomWarpEditor";
@@ -23,7 +24,7 @@ type AddMode = "editable" | "image";
 const FONT_FAMILY_OPTIONS = [
   { value: "roboto", label: "Roboto (Sans-Serif)", url: "https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxP.ttf" },
   { value: "open-sans", label: "Open Sans", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/opensans/OpenSans%5Bwdth%2Cwght%5D.ttf" },
-  { value: "poppins-bold", label: "Poppins Bold", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/poppins/Poppins-Bold.ttf" },
+  { value: "poppins-medium", label: "Poppins", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/poppins/Poppins-Medium.ttf" },
   { value: "lato", label: "Lato", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/lato/Lato-Regular.ttf" },
   { value: "righteous", label: "Righteous", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/righteous/Righteous-Regular.ttf" },
   { value: "abril-fatface", label: "Abril Fatface", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/abrilfatface/AbrilFatface-Regular.ttf" },
@@ -42,6 +43,8 @@ export function TextWarpPanel() {
   const [activeTab, setActiveTab] = useState<PanelTab>("general");
   const [fontFamily, setFontFamily] = useState("roboto");
   const [mode, setMode] = useState<AddMode>("editable");
+  // Multiplier on fontSize — 1.0 = tight, 1.15 = normal default, 2.5 = very loose.
+  const [lineHeight, setLineHeight] = useState(1.15);
 
   const fontUrl = useMemo(
     () => FONT_FAMILY_OPTIONS.find((opt) => opt.value === fontFamily)?.url ?? FONT_FAMILY_OPTIONS[0].url,
@@ -53,11 +56,9 @@ export function TextWarpPanel() {
     effect,
     fontUrl,
     customMesh,
+    lineHeight,
   });
 
-  // color is now passed through AS a FillColor (solid or gradient) —
-  // buildWarpedImage.ts's WarpRenderArgs.color must accept FillColor too
-  // (see earlier message) for this to reach the exported image.
   const { addToDesign, isAdding: isAddingImage } = useAddTextWarpToDesign({
     text,
     color,
@@ -67,6 +68,7 @@ export function TextWarpPanel() {
     effect,
     customMesh,
     fontUrl,
+    lineHeight,
   });
 
   const { addOrUpdate, isAdding: isAddingEditable, selectedData, isEditingExisting } =
@@ -76,8 +78,6 @@ export function TextWarpPanel() {
     if (!selectedData) return;
     setMode("editable");
     setText(selectedData.text);
-    // Handles old saved elements that still have a plain string color
-    // (from before this change), as well as new FillColor ones.
     setColor(
       typeof selectedData.color === "string"
         ? { type: "solid", hexString: selectedData.color }
@@ -85,6 +85,9 @@ export function TextWarpPanel() {
     );
     setEffect(selectedData.effect);
     setCustomMesh(selectedData.customMesh);
+    setLineHeight(
+      typeof (selectedData as any).lineHeight === "number" ? (selectedData as any).lineHeight : 1.15,
+    );
     if (FONT_FAMILY_OPTIONS.some((opt) => opt.value === selectedData.fontFamily)) {
       setFontFamily(selectedData.fontFamily);
     }
@@ -104,6 +107,7 @@ export function TextWarpPanel() {
         customMesh,
         fontUrl,
         fontFamily,
+        lineHeight,
       });
     }
   };
@@ -183,17 +187,20 @@ export function TextWarpPanel() {
       />
 
       {activeTab === "general" ? (
-        <FormField
-          label="Text"
-          control={() => (
-            <MultilineInput
-              autoGrow
-              value={text}
-              onChange={(val) => setText(typeof val === "string" ? val : val?.target?.value ?? "")}
-              placeholder="This is an optional placeholder."
-            />
-          )}
-        />
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <FormField
+            label="Text"
+            control={() => (
+              <MultilineInput
+                autoGrow
+                value={text}
+                onChange={(val) => setText(typeof val === "string" ? val : val?.target?.value ?? "")}
+                placeholder="This is an optional placeholder."
+              />
+            )}
+          />
+          
+        </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           <FormField
@@ -210,6 +217,20 @@ export function TextWarpPanel() {
               />
             )}
           />
+
+          <FormField
+            label="Line spacing"
+            control={() => (
+              <Slider
+                min={0.8}
+                max={2.5}
+                step={0.05}
+                value={lineHeight}
+                onChange={(val) => setLineHeight(Array.isArray(val) ? val[0] : (val as number))}
+              />
+            )}
+          />
+          
         </div>
       )}
 

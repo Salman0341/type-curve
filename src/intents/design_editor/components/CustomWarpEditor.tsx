@@ -59,13 +59,6 @@ function hasUsableBounds(bounds: Box | null | undefined): bounds is Box {
 }
 
 function padToEditorBox(natural: Box): Box {
-  // The SVG already has preserveAspectRatio="xMidYMid meet" inside a
-  // square container, so an overly flat/wide box (natural for one line
-  // of text) gets letterboxed into a thin horizontal strip with lots of
-  // empty space above/below — that's the "doesn't fit properly" look
-  // during the loading/estimate phase, before real font metrics arrive.
-  // A larger vertical margin keeps the box closer to square so it fills
-  // the canvas nicely even before the measurement effect corrects it.
   const marginX = natural.w * 0.3;
   const marginY = Math.max(natural.h * 3, natural.w * 0.28);
   return {
@@ -102,15 +95,19 @@ export function CustomWarpEditor({
   const canUseWarpedPath =
     hasUsableBounds(textBounds) && pathData && !pathData.includes("NaN");
 
-  const [naturalBox, setNaturalBox] = useState<Box>(() =>
-    hasUsableBounds(textBounds) ? textBounds : estimateTextBox(text)
-  );
+  // Only holds the character-count ESTIMATE, corrected by measuring the
+  // fallback <text>'s real rendered size. Used only while real
+  // textBounds hasn't arrived from the parent yet.
+  const [estimatedBox, setEstimatedBox] = useState<Box>(() => estimateTextBox(text));
 
-  useEffect(() => {
-    if (hasUsableBounds(textBounds)) {
-      setNaturalBox(textBounds);
-    }
-  }, [textBounds]);
+  // Tracks whether the estimate has been corrected at least once by
+  // actually measuring the rendered fallback text. Until then, the
+  // fallback stays invisible (opacity 0) instead of flashing at the
+  // wrong guessed size — this is what was still overflowing/showing the
+  // wrong font-size even after naturalBox stopped lagging a render
+  // behind: the GUESS itself (before any measurement) was simply wrong,
+  // not just stale.
+  const [hasMeasuredFallback, setHasMeasuredFallback] = useState(false);
 
   useLayoutEffect(() => {
     if (hasUsableBounds(textBounds)) return;
@@ -125,7 +122,7 @@ export function CustomWarpEditor({
     }
     if (!bbox.width || !bbox.height) return;
 
-    setNaturalBox((prev) => {
+    setEstimatedBox((prev) => {
       const unchanged =
         Math.abs(prev.x - bbox.x) < 0.5 &&
         Math.abs(prev.y - bbox.y) < 0.5 &&
@@ -133,7 +130,12 @@ export function CustomWarpEditor({
         Math.abs(prev.h - bbox.height) < 0.5;
       return unchanged ? prev : { x: bbox.x, y: bbox.y, w: bbox.width, h: bbox.height };
     });
+    setHasMeasuredFallback(true);
   });
+
+  // Derived synchronously every render — textBounds (once real) and
+  // naturalBox can never be out of sync for even one frame.
+  const naturalBox: Box = hasUsableBounds(textBounds) ? textBounds : estimatedBox;
 
   const handleResetShape = () => {
     if (typeof onMeshChange === "function") {
@@ -292,7 +294,7 @@ export function CustomWarpEditor({
 
           {canUseWarpedPath ? (
             <path d={pathData} fill={getSvgFillAttr(color, EDITOR_GRADIENT_ID)} />
-          ) : (
+          ) : !isLoading ? (
             <text
               ref={fallbackTextRef}
               x={naturalBox.x}
@@ -301,10 +303,13 @@ export function CustomWarpEditor({
               fontFamily="Arial Black, Arial, sans-serif"
               fontSize={naturalBox.h * 1.35}
               fontWeight={900}
+              textLength={naturalBox.w}
+              lengthAdjust="spacingAndGlyphs"
+              style={{ opacity: hasUsableBounds(textBounds) || hasMeasuredFallback ? 1 : 0 }}
             >
               {text}
             </text>
-          )}
+          ) : null}
 
           <path
             d={outlinePath}

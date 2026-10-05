@@ -1,3 +1,4 @@
+// src/utils/buildWarpedImage.ts
 import { loadFont } from "./textToSvgPath";
 import type { TextBounds } from "./warpTransformers";
 import {
@@ -15,6 +16,8 @@ import {
 } from "./customWarpMath";
 import type { FillColor } from "./fillColor";
 import { toRepresentativeHex, toSvgFill } from "./fillColor";
+import { flattenCurves } from "./pathSubdivide";
+import { getMultilinePath } from "./multilineTextPath";
 
 export interface WarpRenderArgs {
   text: string;
@@ -25,6 +28,7 @@ export interface WarpRenderArgs {
   effect?: WarpEffect;
   customMesh?: CustomMeshState;
   fontUrl: string;
+  lineHeight?: number;
 }
 
 export async function buildExportSvgMarkup(
@@ -33,7 +37,10 @@ export async function buildExportSvgMarkup(
   const font = await loadFont(args.fontUrl);
   const baseFontSize = 100;
 
-  const path = font.getPath(args.text, 0, 0, baseFontSize);
+  const path = getMultilinePath(font, args.text, baseFontSize, args.lineHeight ?? 1.15);
+
+  path.commands = flattenCurves(path.commands as any) as any;
+
   const naturalBB = path.getBoundingBox();
   const naturalWidth = Math.max(naturalBB.x2 - naturalBB.x1, 1);
   const naturalHeight = Math.max(naturalBB.y2 - naturalBB.y1, 1);
@@ -74,30 +81,59 @@ export async function buildExportSvgMarkup(
 
     path.commands = path.commands.map((cmd: any) => {
       const c = { ...cmd };
+
       if (typeof c.x === "number" && typeof c.y === "number") {
         const p = transformPoint(c.x, c.y);
         c.x = p.x;
         c.y = p.y;
       }
+
       if (typeof c.x1 === "number" && typeof c.y1 === "number") {
         const p1 = transformPoint(c.x1, c.y1);
         c.x1 = p1.x;
         c.y1 = p1.y;
       }
+
       if (typeof c.x2 === "number" && typeof c.y2 === "number") {
         const p2 = transformPoint(c.x2, c.y2);
         c.x2 = p2.x;
         c.y2 = p2.y;
       }
+
       return c;
     });
   }
 
-  const d = path.toPathData(3);
+  const d = path.toPathData(4);
 
-  const warpedBB = path.getBoundingBox();
-  const width = Math.max(warpedBB.x2 - warpedBB.x1, 1);
-  const height = Math.max(warpedBB.y2 - warpedBB.y1, 1);
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+
+  path.commands.forEach((cmd: any) => {
+    const processPoint = (x?: number, y?: number) => {
+      if (typeof x === "number" && !isNaN(x)) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+      }
+      if (typeof y === "number" && !isNaN(y)) {
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    };
+    processPoint(cmd.x, cmd.y);
+    processPoint(cmd.x1, cmd.y1);
+    processPoint(cmd.x2, cmd.y2);
+  });
+
+  if (!isFinite(minX)) minX = naturalBB.x1;
+  if (!isFinite(maxX)) maxX = naturalBB.x2;
+  if (!isFinite(minY)) minY = naturalBB.y1;
+  if (!isFinite(maxY)) maxY = naturalBB.y2;
+
+  const actualWidth = Math.max(maxX - minX, 1);
+  const actualHeight = Math.max(maxY - minY, 1);
 
   const renderStyle = computeRenderStyle(
     args.style,
@@ -106,12 +142,9 @@ export async function buildExportSvgMarkup(
   );
 
   const strokeColor = toRepresentativeHex(args.color);
-
-  // Unique ID generator taake SVGs clashes na ho
   const gradientId = `warp-export-gradient-${Math.random().toString(36).substring(2, 9)}`;
   const { fillAttr, defsMarkup } = toSvgFill(args.color, gradientId);
 
-  // Stroke tabhi draw hoga jab thickness > 0 ho
   const strokeElements =
     !renderStyle.isSolid && args.thickness > 0
       ? renderStyle.layers
@@ -125,11 +158,14 @@ export async function buildExportSvgMarkup(
   const fillElement = `<path d="${d}" fill="${fillAttr}" />`;
   const defsSection = defsMarkup ? `<defs>${defsMarkup}</defs>` : "";
 
-  const padding = Math.max(width, height) * 0.06 + 6;
-  const vbX = warpedBB.x1 - padding;
-  const vbY = warpedBB.y1 - padding;
-  const vbW = width + padding * 2;
-  const vbH = height + padding * 2;
+  const strokePadding = args.thickness > 0 ? args.thickness * 2 : 0;
+  const horizontalClearance = Math.max(actualWidth * 0.08, 16) + strokePadding;
+  const verticalClearance = Math.max(actualHeight * 0.08, 16) + strokePadding;
+
+  const vbX = minX - horizontalClearance;
+  const vbY = minY - verticalClearance;
+  const vbW = actualWidth + horizontalClearance * 2;
+  const vbH = actualHeight + verticalClearance * 2;
 
   const exportW = Math.round(vbW * 3);
   const exportH = Math.round(vbH * 3);

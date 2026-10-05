@@ -1,3 +1,4 @@
+// src/utils/warpTextCompute.ts
 import type opentype from "opentype.js";
 import type {
   CustomMeshState} from "./customWarpMath";
@@ -11,10 +12,9 @@ import {
   createRiseDecreaseTransformer,
   createRiseIncreaseTransformer,
 } from "./warpTransformers";
+import { flattenCurves } from "./pathSubdivide";
+import { getMultilinePath } from "./multilineTextPath";
 
-// The single source of truth for what a "warp effect" can be — everything
-// else (StylePresetPicker's presets, useSvgTextWarp) imports this instead
-// of redefining it, which is what caused the earlier "arch"/"flag" mismatch.
 export type WarpEffect = "bulge" | "rise-decrease" | "rise-increase" | "custom";
 
 export interface ComputedWarp {
@@ -23,20 +23,19 @@ export interface ComputedWarp {
   textBounds: { x: number; y: number; w: number; h: number };
 }
 
-// Plain function, no React/hooks involved — safe to call directly inside a
-// .map() for N thumbnails without violating rules of hooks, and safe to
-// call from useSvgTextWarp for the main preview. Both paths run through
-// this exact same code, so they can never visually disagree.
 export function computeWarpedText(
   font: opentype.Font,
   text: string,
   effect: WarpEffect,
   customMesh: CustomMeshState = DEFAULT_CUSTOM_MESH,
+  lineHeight = 1.15,
 ): ComputedWarp | null {
   if (!text || !text.trim()) return null;
 
-  const path = font.getPath(text, 0, 0, 72);
+  const path = getMultilinePath(font, text, 72, lineHeight);
   if (!path || !path.commands || path.commands.length === 0) return null;
+
+  path.commands = flattenCurves(path.commands as any) as any;
 
   const bb = path.getBoundingBox();
   const width = Math.max(bb.x2 - bb.x1, 10);

@@ -15,6 +15,7 @@ interface UseSvgTextWarpProps {
   effect: WarpEffect;
   fontUrl: string;
   customMesh?: CustomMeshState;
+  lineHeight?: number;
 }
 
 export interface SvgTextBounds {
@@ -29,6 +30,7 @@ export function useSvgTextWarp({
   effect,
   fontUrl,
   customMesh = DEFAULT_CUSTOM_MESH,
+  lineHeight = 1.15,
 }: UseSvgTextWarpProps) {
   const {
     font,
@@ -45,7 +47,7 @@ export function useSvgTextWarp({
     }
     try {
       return {
-        data: computeWarpedText(font, text, effect, customMesh),
+        data: computeWarpedText(font, text, effect, customMesh, lineHeight),
         error: null as string | null,
       };
     } catch (err: any) {
@@ -56,7 +58,7 @@ export function useSvgTextWarp({
       };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [font, text, effect, JSON.stringify(customMesh)]);
+  }, [font, text, effect, JSON.stringify(customMesh), lineHeight]);
 
   const isLoading =
     fontLoading ||

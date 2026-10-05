@@ -18,6 +18,7 @@ export interface TextWarpAppElementData {
   style: WarpStyle;
   variant: OutlineVariant;
   customMesh: CustomMeshState;
+  lineHeight: number;
   imageRef: ImageRef;
   width: number;
   height: number;
