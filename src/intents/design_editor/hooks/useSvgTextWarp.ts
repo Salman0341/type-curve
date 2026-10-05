@@ -2,13 +2,19 @@ import { useMemo } from "react";
 import { useLoadedFont } from "./useLoadedFont";
 import type { WarpEffect } from "../../../utils/warpTextCompute";
 import { computeWarpedText } from "../../../utils/warpTextCompute";
-import type {
-  CustomMeshState} from "../../../utils/customWarpMath";
-import {
-  DEFAULT_CUSTOM_MESH,
-} from "../../../utils/customWarpMath";
+import type { CustomMeshState } from "../../../utils/customWarpMath";
+import { DEFAULT_CUSTOM_MESH } from "../../../utils/customWarpMath";
+import type { FillColor } from "../../../utils/fillColor";
 
 export type { WarpEffect };
+
+export interface ShadowConfig {
+  type: string;
+  offset: number;
+  angle: number;
+  blur: number;
+  color: FillColor | string;
+}
 
 interface UseSvgTextWarpProps {
   text: string;
@@ -16,6 +22,8 @@ interface UseSvgTextWarpProps {
   fontUrl: string;
   customMesh?: CustomMeshState;
   lineHeight?: number;
+  shadow?: ShadowConfig;
+  decoration?: string;
 }
 
 export interface SvgTextBounds {
@@ -31,6 +39,8 @@ export function useSvgTextWarp({
   fontUrl,
   customMesh = DEFAULT_CUSTOM_MESH,
   lineHeight = 1.15,
+  shadow,
+  decoration = "none",
 }: UseSvgTextWarpProps) {
   const {
     font,
@@ -47,7 +57,15 @@ export function useSvgTextWarp({
     }
     try {
       return {
-        data: computeWarpedText(font, text, effect, customMesh, lineHeight),
+        data: computeWarpedText(
+          font,
+          text,
+          effect,
+          customMesh,
+          lineHeight,
+          shadow,
+          decoration
+        ),
         error: null as string | null,
       };
     } catch (err: any) {
@@ -58,7 +76,15 @@ export function useSvgTextWarp({
       };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [font, text, effect, JSON.stringify(customMesh), lineHeight]);
+  }, [
+    font,
+    text,
+    effect,
+    JSON.stringify(customMesh),
+    lineHeight,
+    JSON.stringify(shadow),
+    decoration,
+  ]);
 
   const isLoading =
     fontLoading ||
@@ -69,6 +95,7 @@ export function useSvgTextWarp({
     pathData: computed.data?.pathData ?? "",
     viewBox: computed.data?.viewBox ?? "0 0 320 180",
     textBounds: computed.data?.textBounds ?? null,
+    decorationPathData: (computed.data as any)?.decorationPathData ?? "",
     isLoading,
     error,
   };

@@ -1,11 +1,8 @@
 import { useCallback, useState } from "react";
 import { upload } from "@canva/asset";
 import { addElementAtPoint, getCurrentPageContext } from "@canva/design";
-import type {
-  WarpRenderArgs} from "../../../utils/buildWarpedImage";
-import {
-  buildExportSvgMarkup
-} from "../../../utils/buildWarpedImage";
+import type { WarpRenderArgs } from "../../../utils/buildWarpedImage";
+import { buildExportSvgMarkup } from "../../../utils/buildWarpedImage";
 import { svgToPngDataUrl } from "../../../utils/svgToPngExport";
 
 export function useAddTextWarpToDesign(args: WarpRenderArgs) {

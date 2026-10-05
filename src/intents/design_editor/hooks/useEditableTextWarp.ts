@@ -1,17 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { upload } from "@canva/asset";
-import type {
-  WarpRenderArgs} from "../../../utils/buildWarpedImage";
-import {
-  buildExportSvgMarkup
-} from "../../../utils/buildWarpedImage";
+import type { WarpRenderArgs } from "../../../utils/buildWarpedImage";
+import { buildExportSvgMarkup } from "../../../utils/buildWarpedImage";
 import { svgToPngDataUrl } from "../../../utils/svgToPngExport";
 import type {
   TextWarpAppElementData,
-  TextWarpAppElementChangeEvent} from "../appElement";
-import {
-  textWarpAppElementClient
+  TextWarpAppElementChangeEvent,
 } from "../appElement";
+import { textWarpAppElementClient } from "../appElement";
 
 interface EditableWarpArgs extends WarpRenderArgs {
   fontFamily: string; // stable dropdown value, stored so it can be restored later
@@ -65,6 +61,8 @@ export function useEditableTextWarp() {
         imageRef: ref,
         width,
         height,
+        shadow: args.shadow,
+        decoration: args.decoration,
       };
 
       // addOrUpdateElement handles both cases itself: if an app element

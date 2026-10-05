@@ -11,7 +11,7 @@ import { SvgGradientDef, getSvgFillAttr } from "../../../utils/svgGradientDefs";
 export interface PresetOption {
   id: string;
   name: string;
-  effect: WarpEffect;
+  effect?: WarpEffect;
   isCustom?: boolean;
 }
 
@@ -27,30 +27,41 @@ export { PRESETS as STYLE_PRESETS };
 const THUMB_SIZE = 84;
 
 interface StylePresetPickerProps {
-  selectedEffect?: WarpEffect;
-  onSelectEffect?: (effect: WarpEffect) => void;
-  text: string;
-  fontUrl: string;
+  title?: string;
+  presets?: PresetOption[];
+  selectedEffect?: WarpEffect | string;
+  onSelectEffect?: (effect: WarpEffect | string) => void;
+  selectedId?: string;
+  onSelect?: (id: string) => void;
+  text?: string;
+  fontUrl?: string;
   color?: FillColor;
   customMesh?: CustomMeshState;
+  mode?: "warp" | "shadow" | "decoration";
 }
 
 export function StylePresetPicker({
+  title = "Warp type",
+  presets = PRESETS,
   selectedEffect,
   onSelectEffect,
-  text,
-  fontUrl,
+  selectedId,
+  onSelect,
+  text = "",
+  fontUrl = "",
   color = DEFAULT_FILL_COLOR,
+  mode = "warp",
 }: StylePresetPickerProps) {
   const { font } = useLoadedFont(fontUrl);
 
-  const handlePresetClick = (effect: WarpEffect) => {
+  const activeSelected = selectedId || selectedEffect;
+
+  const handlePresetClick = (targetEffectOrId: string) => {
     if (typeof onSelectEffect === "function") {
-      try {
-        onSelectEffect(effect);
-      } catch (err) {
-        console.error("Error executing onSelectEffect:", err);
-      }
+      onSelectEffect(targetEffectOrId as WarpEffect);
+    }
+    if (typeof onSelect === "function") {
+      onSelect(targetEffectOrId);
     }
   };
 
@@ -65,17 +76,26 @@ export function StylePresetPicker({
       }}
     >
       <Text size="small" variant="bold">
-        Warp type
+        {title}
       </Text>
 
       <Carousel>
-        {PRESETS.map((preset) => {
-          const isSelected = selectedEffect === preset.effect;
+        {presets.map((preset) => {
+          const isSelected =
+            activeSelected === preset.id || activeSelected === preset.effect;
           const gradientId = `warp-preset-gradient-${preset.id}`;
 
           let pathData = "";
           let viewBox = "0 0 320 180";
-          if (!preset.isCustom && font && text && text.trim()) {
+
+          if (
+            mode === "warp" &&
+            !preset.isCustom &&
+            font &&
+            text &&
+            text.trim() &&
+            preset.effect
+          ) {
             try {
               const result = computeWarpedText(font, text, preset.effect);
               if (result) {
@@ -87,16 +107,18 @@ export function StylePresetPicker({
             }
           }
 
+          const targetValue = preset.effect || preset.id;
+
           return (
             <div
               key={preset.id}
               role="button"
               tabIndex={0}
-              onClick={() => handlePresetClick(preset.effect)}
+              onClick={() => handlePresetClick(targetValue)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  handlePresetClick(preset.effect);
+                  handlePresetClick(targetValue);
                 }
               }}
               style={{
@@ -117,7 +139,11 @@ export function StylePresetPicker({
                 gap: 4,
               }}
             >
-              {preset.isCustom ? (
+              {mode !== "warp" ? (
+                <Text size="small" variant="bold">
+                  {preset.name.toUpperCase()}
+                </Text>
+              ) : preset.isCustom ? (
                 <div
                   style={{
                     display: "flex",

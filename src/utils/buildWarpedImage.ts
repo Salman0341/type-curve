@@ -19,6 +19,14 @@ import { toRepresentativeHex, toSvgFill } from "./fillColor";
 import { flattenCurves } from "./pathSubdivide";
 import { getMultilinePath } from "./multilineTextPath";
 
+export interface ShadowConfig {
+  type: string;
+  offset: number;
+  angle: number;
+  blur: number;
+  color: FillColor | string;
+}
+
 export interface WarpRenderArgs {
   text: string;
   color: FillColor;
@@ -29,6 +37,8 @@ export interface WarpRenderArgs {
   customMesh?: CustomMeshState;
   fontUrl: string;
   lineHeight?: number;
+  shadow?: ShadowConfig;
+  decoration?: string;
 }
 
 export async function buildExportSvgMarkup(
@@ -145,6 +155,25 @@ export async function buildExportSvgMarkup(
   const gradientId = `warp-export-gradient-${Math.random().toString(36).substring(2, 9)}`;
   const { fillAttr, defsMarkup } = toSvgFill(args.color, gradientId);
 
+  // --- SHADOW FILTER CREATION ---
+  let shadowFilterMarkup = "";
+  let filterAttribute = "";
+
+  if (args.shadow && args.shadow.type !== "none") {
+    const filterId = `export-shadow-filter-${Math.random().toString(36).substring(2, 9)}`;
+    const rad = (args.shadow.angle * Math.PI) / 180;
+    const dx = args.shadow.offset * Math.cos(rad);
+    const dy = args.shadow.offset * Math.sin(rad);
+    const shadowHex = typeof args.shadow.color === "string" 
+      ? args.shadow.color 
+      : toRepresentativeHex(args.shadow.color);
+
+    shadowFilterMarkup = `<filter id="${filterId}" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="${dx}" dy="${dy}" stdDeviation="${args.shadow.blur / 2}" flood-color="${shadowHex}" flood-opacity="0.8"/>
+    </filter>`;
+    filterAttribute = ` filter="url(#${filterId})"`;
+  }
+
   const strokeElements =
     !renderStyle.isSolid && args.thickness > 0
       ? renderStyle.layers
@@ -155,12 +184,16 @@ export async function buildExportSvgMarkup(
           .join("")
       : "";
 
-  const fillElement = `<path d="${d}" fill="${fillAttr}" />`;
-  const defsSection = defsMarkup ? `<defs>${defsMarkup}</defs>` : "";
+  const fillElement = `<path d="${d}" fill="${fillAttr}"${filterAttribute} />`;
 
+  const combinedDefs = [defsMarkup, shadowFilterMarkup].filter(Boolean).join("");
+  const defsSection = combinedDefs ? `<defs>${combinedDefs}</defs>` : "";
+
+  // Extra padding calculation including shadow offset and blur
+  const shadowPadding = args.shadow && args.shadow.type !== "none" ? args.shadow.offset + args.shadow.blur : 0;
   const strokePadding = args.thickness > 0 ? args.thickness * 2 : 0;
-  const horizontalClearance = Math.max(actualWidth * 0.08, 16) + strokePadding;
-  const verticalClearance = Math.max(actualHeight * 0.08, 16) + strokePadding;
+  const horizontalClearance = Math.max(actualWidth * 0.08, 16) + strokePadding + shadowPadding;
+  const verticalClearance = Math.max(actualHeight * 0.08, 16) + strokePadding + shadowPadding;
 
   const vbX = minX - horizontalClearance;
   const vbY = minY - verticalClearance;

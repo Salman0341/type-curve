@@ -7,7 +7,7 @@ import {
   Select,
   Slider,
 } from "@canva/app-ui-kit";
-import { StylePresetPicker } from "./StylePresetPicker";
+import { StylePresetPicker, PresetOption } from "./StylePresetPicker";
 import { CustomWarpEditor } from "./CustomWarpEditor";
 import { GradientColorField } from "./GradientColorField";
 import { useSvgTextWarp, WarpEffect } from "../hooks/useSvgTextWarp";
@@ -33,6 +33,19 @@ const FONT_FAMILY_OPTIONS = [
   { value: "satisfy", label: "Satisfy", url: "https://cdn.jsdelivr.net/gh/google/fonts@main/apache/satisfy/Satisfy-Regular.ttf" },
 ];
 
+const SHADOW_OPTIONS: PresetOption[] = [
+  { id: "none", name: "None" },
+  { id: "drop", name: "Drop" },
+  { id: "line", name: "Line", isPro: true },
+  { id: "block", name: "Block", isPro: true },
+];
+
+const DECORATION_OPTIONS: PresetOption[] = [
+  { id: "none", name: "None" },
+  { id: "lines", name: "Lines" },
+  { id: "color_cut", name: "Color Cut" },
+];
+
 const PREVIEW_GRADIENT_ID = "warp-preview-gradient";
 
 export function TextWarpPanel() {
@@ -43,13 +56,28 @@ export function TextWarpPanel() {
   const [activeTab, setActiveTab] = useState<PanelTab>("general");
   const [fontFamily, setFontFamily] = useState("roboto");
   const [mode, setMode] = useState<AddMode>("editable");
-  // Multiplier on fontSize — 1.0 = tight, 1.15 = normal default, 2.5 = very loose.
   const [lineHeight, setLineHeight] = useState(1.15);
+
+  // --- Shadow States ---
+  const [shadowType, setShadowType] = useState<string>("none");
+  const [shadowOffset, setShadowOffset] = useState<number>(4);
+  const [shadowAngle, setShadowAngle] = useState<number>(45);
+  const [shadowBlur, setShadowBlur] = useState<number>(12);
+  const [shadowColor, setShadowColor] = useState<FillColor>(DEFAULT_FILL_COLOR);
+
+  // --- Text Decoration State ---
+  const [decorationType, setDecorationType] = useState<string>("none");
 
   const fontUrl = useMemo(
     () => FONT_FAMILY_OPTIONS.find((opt) => opt.value === fontFamily)?.url ?? FONT_FAMILY_OPTIONS[0].url,
     [fontFamily],
   );
+
+  const shadowHexColor = useMemo(() => {
+    if (typeof shadowColor === "string") return shadowColor;
+    if (shadowColor.type === "solid") return shadowColor.hexString;
+    return "#000000";
+  }, [shadowColor]);
 
   const { pathData, viewBox, textBounds, isLoading, error } = useSvgTextWarp({
     text,
@@ -93,7 +121,35 @@ export function TextWarpPanel() {
     }
   }, [selectedData]);
 
+  const shadowDx = useMemo(() => {
+    const rad = (shadowAngle * Math.PI) / 180;
+    return shadowOffset * Math.cos(rad);
+  }, [shadowOffset, shadowAngle]);
+
+  const shadowDy = useMemo(() => {
+    const rad = (shadowAngle * Math.PI) / 180;
+    return shadowOffset * Math.sin(rad);
+  }, [shadowOffset, shadowAngle]);
+
+  const resetShadow = () => {
+    setShadowOffset(4);
+    setShadowAngle(45);
+    setShadowBlur(12);
+    setShadowColor(DEFAULT_FILL_COLOR);
+  };
+
   const handleAddOrUpdate = () => {
+    const extraConfig = {
+      shadow: {
+        type: shadowType,
+        offset: shadowOffset,
+        angle: shadowAngle,
+        blur: shadowBlur,
+        color: shadowColor,
+      },
+      decoration: decorationType,
+    };
+
     if (mode === "image") {
       addToDesign();
     } else {
@@ -108,6 +164,7 @@ export function TextWarpPanel() {
         fontUrl,
         fontFamily,
         lineHeight,
+        ...extraConfig,
       });
     }
   };
@@ -132,6 +189,7 @@ export function TextWarpPanel() {
         overflowX: "hidden",
       }}
     >
+      {/* Preview Box */}
       {effect === "custom" ? (
         <CustomWarpEditor
           text={text}
@@ -168,8 +226,23 @@ export function TextWarpPanel() {
             <svg viewBox={viewBox} style={{ width: "100%", height: "100%", display: "block" }}>
               <defs>
                 <SvgGradientDef color={color} id={PREVIEW_GRADIENT_ID} />
+                {shadowType !== "none" && (
+                  <filter id="drop-shadow-filter" x="-50%" y="-50%" width="200%" height="200%">
+                    <feDropShadow
+                      dx={shadowDx}
+                      dy={shadowDy}
+                      stdDeviation={shadowBlur / 2}
+                      floodColor={shadowHexColor}
+                      floodOpacity="0.8"
+                    />
+                  </filter>
+                )}
               </defs>
-              <path d={pathData} fill={getSvgFillAttr(color, PREVIEW_GRADIENT_ID)} />
+              <path
+                d={pathData}
+                fill={getSvgFillAttr(color, PREVIEW_GRADIENT_ID)}
+                filter={shadowType !== "none" ? "url(#drop-shadow-filter)" : undefined}
+              />
             </svg>
           ) : (
             <span style={{ fontSize: "13px", color: "#999" }}>Type text to preview</span>
@@ -177,6 +250,7 @@ export function TextWarpPanel() {
         </div>
       )}
 
+      {/* Tabs Control */}
       <SegmentedControl
         options={[
           { value: "general", label: "General" },
@@ -186,8 +260,9 @@ export function TextWarpPanel() {
         onChange={(value) => setActiveTab(value as PanelTab)}
       />
 
+      {/* TAB 1: GENERAL (Text Input & Warp Type Selection) */}
       {activeTab === "general" ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           <FormField
             label="Text"
             control={() => (
@@ -199,14 +274,29 @@ export function TextWarpPanel() {
               />
             )}
           />
-          
+
+          {/* Warp Type Carousel shifted to General Tab */}
+          <div style={{ width: "100%", maxWidth: "100%", boxSizing: "border-box", overflow: "hidden" }}>
+            <StylePresetPicker
+              title="Warp type"
+              selectedEffect={effect}
+              onSelectEffect={(newEffect) => setEffect(newEffect as WarpEffect)}
+              text={text}
+              fontUrl={fontUrl}
+              color={color}
+              customMesh={customMesh}
+              mode="warp"
+            />
+          </div>
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        /* TAB 2: STYLE (Color, Fonts, Line Spacing, Shadow, Text Decoration) */
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           <FormField
             label="Color"
             control={() => <GradientColorField value={color} onChange={setColor} />}
           />
+
           <FormField
             label="Select Web Font"
             control={() => (
@@ -230,21 +320,85 @@ export function TextWarpPanel() {
               />
             )}
           />
-          
+
+          {/* Shadow Carousel */}
+          <div style={{ width: "100%", maxWidth: "100%", boxSizing: "border-box", overflow: "hidden" }}>
+            <StylePresetPicker
+              title="Shadow"
+              presets={SHADOW_OPTIONS}
+              selectedId={shadowType}
+              onSelect={(id) => setShadowType(id)}
+              mode="shadow"
+            />
+          </div>
+
+          {/* Shadow Options (Rendered only when Shadow is active) */}
+          {shadowType !== "none" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <FormField
+                label="Shadow Color"
+                control={() => <GradientColorField value={shadowColor} onChange={setShadowColor} />}
+              />
+
+              <FormField
+                label="Offset"
+                control={() => (
+                  <Slider
+                    min={0}
+                    max={50}
+                    step={1}
+                    value={shadowOffset}
+                    onChange={(val) => setShadowOffset(Array.isArray(val) ? val[0] : (val as number))}
+                  />
+                )}
+              />
+
+              <FormField
+                label="Angle"
+                control={() => (
+                  <Slider
+                    min={0}
+                    max={360}
+                    step={1}
+                    value={shadowAngle}
+                    onChange={(val) => setShadowAngle(Array.isArray(val) ? val[0] : (val as number))}
+                  />
+                )}
+              />
+
+              <FormField
+                label="Blur"
+                control={() => (
+                  <Slider
+                    min={0}
+                    max={50}
+                    step={1}
+                    value={shadowBlur}
+                    onChange={(val) => setShadowBlur(Array.isArray(val) ? val[0] : (val as number))}
+                  />
+                )}
+              />
+
+              <Button onClick={resetShadow} variant="secondary">
+                Reset
+              </Button>
+            </div>
+          )}
+
+          {/* Text Decoration Carousel */}
+          <div style={{ width: "100%", maxWidth: "100%", boxSizing: "border-box", overflow: "hidden" }}>
+            <StylePresetPicker
+              title="Text Decoration"
+              presets={DECORATION_OPTIONS}
+              selectedId={decorationType}
+              onSelect={(id) => setDecorationType(id)}
+              mode="decoration"
+            />
+          </div>
         </div>
       )}
 
-      <div style={{ width: "100%", maxWidth: "100%", boxSizing: "border-box", overflow: "hidden" }}>
-        <StylePresetPicker
-          selectedEffect={effect}
-          onSelectEffect={(newEffect) => setEffect(newEffect)}
-          text={text}
-          fontUrl={fontUrl}
-          color={color}
-          customMesh={customMesh}
-        />
-      </div>
-
+      {/* Global Type & Action Buttons */}
       <FormField
         label="Type"
         control={() => (
