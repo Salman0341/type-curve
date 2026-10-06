@@ -95,18 +95,7 @@ export function CustomWarpEditor({
   const canUseWarpedPath =
     hasUsableBounds(textBounds) && pathData && !pathData.includes("NaN");
 
-  // Only holds the character-count ESTIMATE, corrected by measuring the
-  // fallback <text>'s real rendered size. Used only while real
-  // textBounds hasn't arrived from the parent yet.
   const [estimatedBox, setEstimatedBox] = useState<Box>(() => estimateTextBox(text));
-
-  // Tracks whether the estimate has been corrected at least once by
-  // actually measuring the rendered fallback text. Until then, the
-  // fallback stays invisible (opacity 0) instead of flashing at the
-  // wrong guessed size — this is what was still overflowing/showing the
-  // wrong font-size even after naturalBox stopped lagging a render
-  // behind: the GUESS itself (before any measurement) was simply wrong,
-  // not just stale.
   const [hasMeasuredFallback, setHasMeasuredFallback] = useState(false);
 
   useLayoutEffect(() => {
@@ -133,8 +122,6 @@ export function CustomWarpEditor({
     setHasMeasuredFallback(true);
   });
 
-  // Derived synchronously every render — textBounds (once real) and
-  // naturalBox can never be out of sync for even one frame.
   const naturalBox: Box = hasUsableBounds(textBounds) ? textBounds : estimatedBox;
 
   const handleResetShape = () => {
@@ -239,140 +226,158 @@ export function CustomWarpEditor({
 
   return (
     <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 12, boxSizing: "border-box" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <Button
-          icon={ArrowLeftIcon }
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (onBack) onBack();
-          }}
-          style={{
-            background: "none",
-            border: "none",
-            color: "#7d2ae8",
-            fontWeight: 600,
-            cursor: "pointer",
-            fontSize: 13,
-            padding: 0,
-          }}
-        >
-        Warp Editor
-        </Button>
-        <span style={{ fontSize: 12, color: "#666" }}>Drag points to warp</span>
-      </div>
-
+      {/* Sticky wrapper: header + canvas stay pinned to the top of the
+          scrolling panel while the user scrolls through the fields
+          below (Color, Font, Shadow, etc), so the live preview/points
+          are always visible instead of scrolling out of view. The
+          Reset Shape button stays OUTSIDE this wrapper, so it scrolls
+          normally with the rest of the panel. A solid background is
+          required on a sticky element, otherwise content scrolling
+          underneath it would show through. */}
       <div
         style={{
-          width: "100%",
-          aspectRatio: "1 / 1",
-          minHeight: 260,
-          maxHeight: 340,
-          background: "#f8f9fa",
-          borderRadius: 12,
-          position: "relative",
-          overflow: "hidden",
-          border: "1px solid #e0e0e0",
-          boxSizing: "border-box",
+          background: "#ffffff",
+          paddingBottom: 4,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
         }}
       >
-        <svg
-          ref={svgRef}
-          viewBox={`${editorBox.x} ${editorBox.y} ${editorBox.w} ${editorBox.h}`}
-          preserveAspectRatio="xMidYMid meet"
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <Button
+            icon={ArrowLeftIcon }
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (onBack) onBack();
+            }}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#7d2ae8",
+              fontWeight: 600,
+              cursor: "pointer",
+              fontSize: 13,
+              padding: 0,
+            }}
+          >
+          Warp Editor
+          </Button>
+          <span style={{ fontSize: 12, color: "#666" }}>Drag points to warp</span>
+        </div>
+
+        <div
           style={{
             width: "100%",
-            height: "100%",
-            display: "block",
-            touchAction: "none",
-            userSelect: "none",
+            aspectRatio: "1 / 1",
+            minHeight: 260,
+            maxHeight: 340,
+            background: "#f8f9fa",
+            borderRadius: 12,
+            position: "relative",
+            overflow: "hidden",
+            border: "1px solid #e0e0e0",
+            boxSizing: "border-box",
           }}
         >
-          <defs>
-            <SvgGradientDef color={color} id={EDITOR_GRADIENT_ID} />
-          </defs>
+          <svg
+            ref={svgRef}
+            viewBox={`${editorBox.x} ${editorBox.y} ${editorBox.w} ${editorBox.h}`}
+            preserveAspectRatio="xMidYMid meet"
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "block",
+              touchAction: "none",
+              userSelect: "none",
+            }}
+          >
+            <defs>
+              <SvgGradientDef color={color} id={EDITOR_GRADIENT_ID} />
+            </defs>
 
-          {canUseWarpedPath ? (
-            <path d={pathData} fill={getSvgFillAttr(color, EDITOR_GRADIENT_ID)} />
-          ) : !isLoading ? (
-            <text
-              ref={fallbackTextRef}
-              x={naturalBox.x}
-              y={naturalBox.y + naturalBox.h * 0.93}
-              fill={getSvgFillAttr(color, EDITOR_GRADIENT_ID)}
-              fontFamily="Arial Black, Arial, sans-serif"
-              fontSize={naturalBox.h * 1.35}
-              fontWeight={900}
-              textLength={naturalBox.w}
-              lengthAdjust="spacingAndGlyphs"
-              style={{ opacity: hasUsableBounds(textBounds) || hasMeasuredFallback ? 1 : 0 }}
-            >
-              {text}
-            </text>
-          ) : null}
+            {canUseWarpedPath ? (
+              <path d={pathData} fill={getSvgFillAttr(color, EDITOR_GRADIENT_ID)} />
+            ) : !isLoading ? (
+              <text
+                ref={fallbackTextRef}
+                x={naturalBox.x}
+                y={naturalBox.y + naturalBox.h * 0.93}
+                fill={getSvgFillAttr(color, EDITOR_GRADIENT_ID)}
+                fontFamily="Arial Black, Arial, sans-serif"
+                fontSize={naturalBox.h * 1.35}
+                fontWeight={900}
+                textLength={naturalBox.w}
+                lengthAdjust="spacingAndGlyphs"
+                style={{ opacity: hasUsableBounds(textBounds) || hasMeasuredFallback ? 1 : 0 }}
+              >
+                {text}
+              </text>
+            ) : null}
 
-          <path
-            d={outlinePath}
-            fill="none"
-            stroke="#0aa5ff"
-            strokeWidth={Math.max(editorBox.w * 0.004, 1)}
-          />
+            <path
+              d={outlinePath}
+              fill="none"
+              stroke="#0aa5ff"
+              strokeWidth={Math.max(editorBox.w * 0.004, 1)}
+            />
 
-          {HANDLE_LINKS.map(([a, b]) => {
-            const pa = toXY(safeMesh.points[a]);
-            const pb = toXY(safeMesh.points[b]);
-            return (
-              <line
-                key={`link-${a}-${b}`}
-                x1={pa.x}
-                y1={pa.y}
-                x2={pb.x}
-                y2={pb.y}
-                stroke="#0aa5ff"
-                strokeWidth={Math.max(editorBox.w * 0.003, 1)}
-                strokeDasharray="4 3"
-              />
-            );
-          })}
+            {HANDLE_LINKS.map(([a, b]) => {
+              const pa = toXY(safeMesh.points[a]);
+              const pb = toXY(safeMesh.points[b]);
+              return (
+                <line
+                  key={`link-${a}-${b}`}
+                  x1={pa.x}
+                  y1={pa.y}
+                  x2={pb.x}
+                  y2={pb.y}
+                  stroke="#0aa5ff"
+                  strokeWidth={Math.max(editorBox.w * 0.003, 1)}
+                  strokeDasharray="4 3"
+                />
+              );
+            })}
 
-          {safeMesh.points.map((pt, idx) => {
-            const isAnchor = ANCHOR_INDICES.has(idx);
-            const isHandle = HANDLE_INDICES.has(idx);
-            if (!isAnchor && !isHandle) return null;
+            {safeMesh.points.map((pt, idx) => {
+              const isAnchor = ANCHOR_INDICES.has(idx);
+              const isHandle = HANDLE_INDICES.has(idx);
+              if (!isAnchor && !isHandle) return null;
 
-            const p = toXY(pt);
-            const r = isAnchor
-              ? Math.max(editorBox.w * 0.032, 8)
-              : Math.max(editorBox.w * 0.022, 5);
+              const p = toXY(pt);
+              const r = isAnchor
+                ? Math.max(editorBox.w * 0.032, 8)
+                : Math.max(editorBox.w * 0.022, 5);
 
-            return (
-              <circle
-                key={`point-${idx}`}
-                cx={p.x}
-                cy={p.y}
-                r={r}
-                fill={isAnchor ? "#0aa5ff" : "#ffffff"}
-                stroke={isAnchor ? "#ffffff" : "#0aa5ff"}
-                strokeWidth={Math.max(editorBox.w * (isAnchor ? 0.006 : 0.008), isAnchor ? 2 : 3)}
-                style={{ cursor: "grab" }}
-                onMouseDown={(e) => handlePointDrag(idx, e)}
-                onTouchStart={(e) => handlePointDrag(idx, e)}
-              />
-            );
-          })}
+              return (
+                <circle
+                  key={`point-${idx}`}
+                  cx={p.x}
+                  cy={p.y}
+                  r={r}
+                  fill={isAnchor ? "#0aa5ff" : "#ffffff"}
+                  stroke={isAnchor ? "#ffffff" : "#0aa5ff"}
+                  strokeWidth={Math.max(editorBox.w * (isAnchor ? 0.006 : 0.008), isAnchor ? 2 : 3)}
+                  style={{ cursor: "grab" }}
+                  onMouseDown={(e) => handlePointDrag(idx, e)}
+                  onTouchStart={(e) => handlePointDrag(idx, e)}
+                />
+              );
+            })}
 
-          {(isLoading || error) && (
-            <text
-              x={editorBox.x + editorBox.w / 2}
-              y={editorBox.y + editorBox.h - editorBox.h * 0.08}
-              fill={error ? "red" : "#666"}
-              fontSize={Math.max(editorBox.h * 0.035, 11)}
-              textAnchor="middle"
-            >
-              {error ? "Preview path error" : "Preparing editable path..."}
-            </text>
-          )}
-        </svg>
+            {(isLoading || error) && (
+              <text
+                x={editorBox.x + editorBox.w / 2}
+                y={editorBox.y + editorBox.h - editorBox.h * 0.08}
+                fill={error ? "red" : "#666"}
+                fontSize={Math.max(editorBox.h * 0.035, 11)}
+                textAnchor="middle"
+              >
+                {error ? "Preview path error" : "Preparing editable path..."}
+              </text>
+            )}
+          </svg>
+        </div>
       </div>
 
       <button
