@@ -3,17 +3,14 @@ import type { AppElementOptions, ImageRef } from "@canva/design";
 import type { CustomMeshState } from "../../utils/customWarpMath";
 import type { WarpEffect } from "./hooks/useSvgTextWarp";
 import type { WarpStyle, OutlineVariant } from "../../utils/strokeStyle";
+import type { ShadowConfig, DecorationConfig, StrokeConfig } from "../../utils/buildWarpedImage";
+import type { FillColor } from "../../utils/fillColor";
 
-// This is the "recipe" stored ON the element itself (NOT the image data —
-// app elements have a 5KB data limit, so we only keep the small settings
-// plus a reference to the already-uploaded image). When the user re-selects
-// this element, Canva hands this exact object back to us so the panel can
-// restore itself to match.
 export interface TextWarpAppElementData {
   text: string;
-  color: string;
+  color: FillColor | string;
   effect: WarpEffect;
-  fontFamily: string; // the dropdown VALUE (e.g. "roboto"), not the bundled URL
+  fontFamily: string;
   thickness: number;
   style: WarpStyle;
   variant: OutlineVariant;
@@ -22,6 +19,10 @@ export interface TextWarpAppElementData {
   imageRef: ImageRef;
   width: number;
   height: number;
+  shadow?: ShadowConfig;
+  decoration?: string;
+  decorationConfig?: DecorationConfig;
+  strokeConfig?: StrokeConfig; // Naya prop
 }
 
 export type TextWarpAppElementChangeEvent = {
@@ -29,9 +30,6 @@ export type TextWarpAppElementChangeEvent = {
   update?: (opts: AppElementOptions<TextWarpAppElementData>) => Promise<void>;
 };
 
-// initAppElement must be called once, outside any React component (per
-// Canva's docs) — this module-level instance is shared by every hook/
-// component that needs to create, update, or listen for this element type.
 export const textWarpAppElementClient = initAppElement<TextWarpAppElementData>({
   render: (data) => {
     return [

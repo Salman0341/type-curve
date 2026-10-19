@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import { Carousel, Text } from "@canva/app-ui-kit";
 
 export interface CarouselOption {
@@ -12,25 +12,61 @@ interface OptionCarouselProps<T extends CarouselOption> {
   selectedId: string;
   onSelect: (id: string) => void;
   renderThumbnail: (option: T) => React.ReactNode;
+  showLabel?: boolean;
 }
 
-const THUMB_SIZE = 84;
+const THUMB_SIZE = 72;
 
-// The ONE carousel used for every option-picker in the panel (Warp type,
-// Shadow, Text Decoration). It only owns layout, selection state, and
-// click/keyboard handling — it has no idea what kind of picker it's
-// being used for. Each thumbnail's actual appearance is entirely up to
-// the caller via renderThumbnail, so adding a 4th picker later never
-// means touching this file.
 export function OptionCarousel<T extends CarouselOption>({
   title,
   options,
   selectedId,
   onSelect,
   renderThumbnail,
+  showLabel = true,
 }: OptionCarouselProps<T>) {
+  // Drag / Ghost-Click Guard:
+  // Tracks whether the pointer down actually happened on THIS specific card
+  const pointerDownRef = useRef<{ id: string; x: number; y: number } | null>(
+    null,
+  );
+
+  const handlePointerDown = (id: string, e: React.PointerEvent) => {
+    pointerDownRef.current = {
+      id,
+      x: e.clientX,
+      y: e.clientY,
+    };
+  };
+
+  const handleCardClick = (id: string, e: React.MouseEvent) => {
+    const downInfo = pointerDownRef.current;
+    pointerDownRef.current = null;
+
+    // 1. Agar pointer down iss card par nahi hua tha (e.g. arrow button par hua tha), click ignore karein
+    if (!downInfo || downInfo.id !== id) {
+      return;
+    }
+
+    // 2. Agar user ne drag/scroll kiya hai (movement > 6px), click ignore karein
+    const distance = Math.hypot(e.clientX - downInfo.x, e.clientY - downInfo.y);
+    if (distance > 6) {
+      return;
+    }
+
+    onSelect(id);
+  };
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", boxSizing: "border-box" }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        width: "100%",
+        boxSizing: "border-box",
+      }}
+    >
       <Text size="small" variant="bold">
         {title}
       </Text>
@@ -38,12 +74,14 @@ export function OptionCarousel<T extends CarouselOption>({
       <Carousel>
         {options.map((opt) => {
           const isSelected = selectedId === opt.id;
+
           return (
             <div
               key={opt.id}
               role="button"
               tabIndex={0}
-              onClick={() => onSelect(opt.id)}
+              onPointerDown={(e) => handlePointerDown(opt.id, e)}
+              onClick={(e) => handleCardClick(opt.id, e)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
@@ -51,25 +89,52 @@ export function OptionCarousel<T extends CarouselOption>({
                 }
               }}
               style={{
-                flex: `0 0 ${THUMB_SIZE}px`,
-                width: THUMB_SIZE,
-                height: THUMB_SIZE,
-                boxSizing: "border-box",
-                cursor: "pointer",
-                outline: "none",
-                borderRadius: 10,
-                border: isSelected ? "2px solid #7d2ae8" : "1px solid #e0e0e0",
-                background: isSelected ? "#f3ecfd" : "#f9f9f9",
-                padding: 4,
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
-                justifyContent: "center",
-                gap: 4,
+                gap: 6,
+                flex: `0 0 ${THUMB_SIZE}px`,
+                cursor: "pointer",
+                outline: "none",
+                userSelect: "none",
               }}
             >
-              {renderThumbnail(opt)}
-              <Text size="xsmall">{opt.name}</Text>
+              {/* Rounded Box Card */}
+              <div
+                style={{
+                  width: THUMB_SIZE,
+                  height: THUMB_SIZE,
+                  boxSizing: "border-box",
+                  borderRadius: 14,
+                  border: isSelected
+                    ? "2px solid #7d2ae8"
+                    : "1px solid #e0e0e0",
+                  background: isSelected ? "#fff" : "#f4f4f4",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: 4,
+                  overflow: "hidden",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                {renderThumbnail(opt)}
+              </div>
+
+              {/* Card Label */}
+              {showLabel && (
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: isSelected ? 600 : 400,
+                    color: isSelected ? "#7d2ae8" : "#333",
+                    textAlign: "center",
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {opt.name}
+                </span>
+              )}
             </div>
           );
         })}

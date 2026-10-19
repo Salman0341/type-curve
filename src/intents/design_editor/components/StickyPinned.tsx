@@ -1,24 +1,18 @@
 import React, { useEffect, useRef, useState } from "react";
 
-// A position:sticky-like effect that works even when Canva's own panel
-// chrome breaks real CSS `position: sticky` (a `transform` somewhere in
-// the ancestor chain, used for panel slide animations, becomes sticky's
-// containing block instead of the real scroll container).
-//
-// Rather than guessing which ancestor scrolls (fragile — different
-// overflow values like auto/scroll/overlay, unexpected DOM structure),
-// this listens for scroll events on `window` with `capture: true`.
-// Scroll events don't bubble, but a capture-phase listener on window
-// still fires for a scroll happening on ANY nested scrollable element,
-// because the capture phase travels top-down through window before
-// reaching the actual target — so `event.target` always tells us
-// exactly which element scrolled, with zero DOM-walking/guessing.
+// A position:sticky-like effect for Canva extensions.
+// Fixed to ignore horizontal / child scrolls (like Carousels).
 export function StickyPinned({ children }: { children: React.ReactNode }) {
   const contentRef = useRef<HTMLDivElement | null>(null);
   const placeholderRef = useRef<HTMLDivElement | null>(null);
   const [stuck, setStuck] = useState(false);
-  const [rect, setRect] = useState<{ left: number; width: number; top: number } | null>(null);
+  const [rect, setRect] = useState<{
+    left: number;
+    width: number;
+    top: number;
+  } | null>(null);
   const stuckHeightRef = useRef(0);
+  const scrollContainerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const handleScroll = (e?: Event) => {
@@ -26,36 +20,66 @@ export function StickyPinned({ children }: { children: React.ReactNode }) {
       const placeholder = placeholderRef.current;
       if (!node || !placeholder) return;
 
-      // The element that actually scrolled — whatever it is, wherever
-      // it is in the tree. Falls back to 0 (viewport top) only for the
-      // very first call below, before any real scroll has happened.
-      const scrollEl = e?.target instanceof HTMLElement ? e.target : null;
-      const containerTop = scrollEl ? scrollEl.getBoundingClientRect().top : 0;
+      const targetEl = e?.target instanceof HTMLElement ? e.target : null;
 
-      const placeholderTop = placeholder.getBoundingClientRect().top;
-      const shouldStick = placeholderTop <= containerTop;
+      // GUARD: Agar scroll hone wala element placeholder ka ancestor NAHI hai
+      // (jaise ke Carousel ka horizontal scroll track), toh isko completely ignore karein!
+      if (targetEl && !targetEl.contains(placeholder)) {
+        return;
+      }
+
+      if (targetEl && targetEl.contains(placeholder)) {
+        scrollContainerRef.current = targetEl;
+      }
+
+      const activeContainer = scrollContainerRef.current;
+      const containerTop = activeContainer
+        ? activeContainer.getBoundingClientRect().top
+        : 0;
+
+      const placeholderRect = placeholder.getBoundingClientRect();
+      const shouldStick = placeholderRect.top <= containerTop;
 
       if (shouldStick) {
-        if (!stuckHeightRef.current) stuckHeightRef.current = node.offsetHeight;
-        const r = node.getBoundingClientRect();
-        setRect({ left: r.left, width: r.width, top: containerTop });
+        if (!stuckHeightRef.current) {
+          stuckHeightRef.current = node.offsetHeight;
+        }
+        // Width aur left hamesha placeholder se lete hain jo document flow mein rehta hai
+        setRect({
+          left: placeholderRect.left,
+          width: placeholderRect.width,
+          top: containerTop,
+        });
       }
+
       setStuck(shouldStick);
     };
 
-    window.addEventListener("scroll", handleScroll, { passive: true, capture: true });
+    window.addEventListener("scroll", handleScroll, {
+      passive: true,
+      capture: true,
+    });
     window.addEventListener("resize", handleScroll as any);
     handleScroll();
 
     return () => {
-      window.removeEventListener("scroll", handleScroll, { capture: true } as any);
+      window.removeEventListener("scroll", handleScroll, {
+        capture: true,
+      } as any);
       window.removeEventListener("resize", handleScroll as any);
     };
   }, []);
 
   return (
     <>
-      <div ref={placeholderRef} style={{ height: stuck ? stuckHeightRef.current : 0 }} />
+      <div
+        ref={placeholderRef}
+        style={{
+          height: stuck ? stuckHeightRef.current : 0,
+          width: "100%",
+          boxSizing: "border-box",
+        }}
+      />
       <div
         ref={contentRef}
         style={
@@ -66,8 +90,9 @@ export function StickyPinned({ children }: { children: React.ReactNode }) {
                 left: rect.left,
                 width: rect.width,
                 zIndex: 50,
+                boxSizing: "border-box",
               }
-            : { position: "static" }
+            : { position: "static", width: "100%", boxSizing: "border-box" }
         }
       >
         {children}

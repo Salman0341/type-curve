@@ -10,7 +10,7 @@ import type {
 import { textWarpAppElementClient } from "../appElement";
 
 interface EditableWarpArgs extends WarpRenderArgs {
-  fontFamily: string; // stable dropdown value, stored so it can be restored later
+  fontFamily: string;
 }
 
 export function useEditableTextWarp() {
@@ -18,9 +18,6 @@ export function useEditableTextWarp() {
     useState<TextWarpAppElementChangeEvent | null>(null);
   const [isAdding, setIsAdding] = useState(false);
 
-  // Fires only for elements THIS app created as an app element — a plain
-  // "Image" mode element never triggers this, so switching modes never
-  // conflicts with restoring state.
   useEffect(() => {
     textWarpAppElementClient.registerOnElementChange((appElement) => {
       setSelected(
@@ -61,13 +58,13 @@ export function useEditableTextWarp() {
         imageRef: ref,
         width,
         height,
+        lineHeight: args.lineHeight ?? 1.15,
         shadow: args.shadow,
         decoration: args.decoration,
+        decorationConfig: args.decorationConfig,
+        strokeConfig: args.strokeConfig, // Stroke yahan include ho gaya
       };
 
-      // addOrUpdateElement handles both cases itself: if an app element
-      // (of this type) is currently selected, it overwrites that element;
-      // otherwise it creates a new one.
       await textWarpAppElementClient.addOrUpdateElement(elementData);
     } catch (error) {
       console.error("Editable add/update failed:", error);

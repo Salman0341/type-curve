@@ -53,9 +53,7 @@ export function toSvgFill(
     return { fillAttr: color.hexString, defsMarkup: "" };
   }
 
-  const sortedStops = color.stops
-    .slice()
-    .sort((a, b) => a.offset - b.offset);
+  const sortedStops = color.stops.slice().sort((a, b) => a.offset - b.offset);
   const stopsMarkup = sortedStops
     .map(
       (s) =>

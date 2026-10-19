@@ -64,7 +64,7 @@ export function useSvgTextWarp({
           customMesh,
           lineHeight,
           shadow,
-          decoration
+          decoration,
         ),
         error: null as string | null,
       };

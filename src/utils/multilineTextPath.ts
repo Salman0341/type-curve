@@ -18,7 +18,9 @@ export function getMultilinePath(
 
   // Each line's own advance width, so shorter lines center against the
   // widest one instead of all sitting flush left.
-  const lineWidths = lines.map((line) => font.getAdvanceWidth(line || " ", fontSize));
+  const lineWidths = lines.map((line) =>
+    font.getAdvanceWidth(line || " ", fontSize),
+  );
   const maxWidth = Math.max(...lineWidths, 1);
 
   let combinedCommands: any[] = [];
@@ -42,7 +44,10 @@ export function getMultilinePath(
 // How many lines the text has and the tallest line's rendered width —
 // used by the editor's fallback estimate (before real font metrics are
 // available) so the placeholder box accounts for line count too.
-export function getLineInfo(text: string): { lineCount: number; longestLine: string } {
+export function getLineInfo(text: string): {
+  lineCount: number;
+  longestLine: string;
+} {
   const lines = (text || "").split("\n");
   const longestLine = lines.reduce((a, b) => (b.length > a.length ? b : a), "");
   return { lineCount: Math.max(lines.length, 1), longestLine };

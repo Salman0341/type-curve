@@ -7,12 +7,22 @@ export function getSvgFillAttr(color: FillColor, gradientId: string): string {
   return `url(#${gradientId})`;
 }
 
-export function SvgGradientDef({ color, id }: { color: FillColor; id: string }) {
+export function SvgGradientDef({
+  color,
+  id,
+}: {
+  color: FillColor;
+  id: string;
+}) {
   if (!isGradient(color)) return null;
 
   const sortedStops = [...color.stops].sort((a, b) => a.offset - b.offset);
   const stopEls = sortedStops.map((s, i) => (
-    <stop key={i} offset={`${Math.round(s.offset * 100)}%`} stopColor={s.hexString} />
+    <stop
+      key={i}
+      offset={`${Math.round(s.offset * 100)}%`}
+      stopColor={s.hexString}
+    />
   ));
 
   if (color.shape === "radial") {
@@ -30,7 +40,13 @@ export function SvgGradientDef({ color, id }: { color: FillColor; id: string }) 
   const y2 = Math.round(50 + Math.sin(rad) * 50);
 
   return (
-    <linearGradient id={id} x1={`${x1}%`} y1={`${y1}%`} x2={`${x2}%`} y2={`${y2}%`}>
+    <linearGradient
+      id={id}
+      x1={`${x1}%`}
+      y1={`${y1}%`}
+      x2={`${x2}%`}
+      y2={`${y2}%`}
+    >
       {stopEls}
     </linearGradient>
   );

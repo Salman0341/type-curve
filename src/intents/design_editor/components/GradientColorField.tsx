@@ -3,7 +3,11 @@ import React, { useState } from "react";
 import { SegmentedControl, Text, Swatch } from "@canva/app-ui-kit";
 import type { Anchor, ColorSelectionEvent } from "@canva/asset";
 import { openColorSelector } from "@canva/asset";
-import type { FillColor, GradientColor, GradientShape } from "../../../utils/fillColor";
+import type {
+  FillColor,
+  GradientColor,
+  GradientShape,
+} from "../../../utils/fillColor";
 import { isGradient, toCssBackground } from "../../../utils/fillColor";
 
 interface GradientColorFieldProps {
@@ -23,7 +27,11 @@ const g = (stops: [string, string], angle = 135): GradientColor => ({
 
 // 4 direction/shape options — uses whatever colors are currently in the
 // stops, only shape/angle differ.
-const STYLE_OPTIONS: Array<{ shape: GradientShape; angle: number; label: string }> = [
+const STYLE_OPTIONS: {
+  shape: GradientShape;
+  angle: number;
+  label: string;
+}[] = [
   { shape: "linear", angle: 90, label: "Left to right" },
   { shape: "linear", angle: 135, label: "Diagonal" },
   { shape: "linear", angle: 45, label: "Diagonal (reverse)" },
@@ -45,16 +53,26 @@ const PRESETS: GradientColor[] = [
 
 function anchorFromEvent(e: React.MouseEvent<HTMLElement>): Anchor {
   const rect = e.currentTarget.getBoundingClientRect();
-  return { width: rect.width, height: rect.height, top: rect.top, left: rect.left };
+  return {
+    width: rect.width,
+    height: rect.height,
+    top: rect.top,
+    left: rect.left,
+  };
 }
 
-function pickSolidColor(anchor: Anchor, current: string): Promise<string | null> {
+function pickSolidColor(
+  anchor: Anchor,
+  current: string,
+): Promise<string | null> {
   return new Promise((resolve) => {
     openColorSelector(anchor, {
       scopes: ["solid"],
       selectedColor: { type: "solid", hexString: current },
       onColorSelect: (event: ColorSelectionEvent<"solid">) => {
-        resolve(event.selection.type === "solid" ? event.selection.hexString : null);
+        resolve(
+          event.selection.type === "solid" ? event.selection.hexString : null,
+        );
       },
     });
   });
@@ -99,7 +117,9 @@ function StopCircle({
           background: hex,
           border: "none",
           outline: "none",
-          boxShadow: hovered ? "0 0 0 2px #ffffff, 0 0 0 4px rgba(0,0,0,0.55)" : "none",
+          boxShadow: hovered
+            ? "0 0 0 2px #ffffff, 0 0 0 4px rgba(0,0,0,0.55)"
+            : "none",
           transform: hovered ? "scale(0.9)" : "scale(1)",
           cursor: "pointer",
           padding: 0,
@@ -188,26 +208,53 @@ const FOUR_COLUMN_GRID: React.CSSProperties = {
   width: "100%",
 };
 
-export function GradientColorField({ value, onChange }: GradientColorFieldProps) {
-  const [tab, setTab] = useState<"solid" | "gradient">(isGradient(value) ? "gradient" : "solid");
+export function GradientColorField({
+  value,
+  onChange,
+}: GradientColorFieldProps) {
+  const [tab, setTab] = useState<"solid" | "gradient">(
+    isGradient(value) ? "gradient" : "solid",
+  );
 
   const gradient: GradientColor = isGradient(value)
     ? value
-    : { type: "gradient", stops: [{ hexString: "#ff9a6a", offset: 0 }, { hexString: "#f0306a", offset: 1 }], shape: "linear", angle: 90 };
+    : {
+        type: "gradient",
+        stops: [
+          { hexString: "#ff9a6a", offset: 0 },
+          { hexString: "#f0306a", offset: 1 },
+        ],
+        shape: "linear",
+        angle: 90,
+      };
 
   const handleTabChange = (next: string) => {
     setTab(next as "solid" | "gradient");
     if (next === "gradient" && !isGradient(value)) {
       onChange(gradient);
     } else if (next === "solid" && isGradient(value)) {
-      onChange({ type: "solid", hexString: value.stops[0]?.hexString ?? "#000000" });
+      onChange({
+        type: "solid",
+        hexString: value.stops[0]?.hexString ?? "#000000",
+      });
     }
   };
 
-  const handleStopClick = async (e: React.MouseEvent<HTMLButtonElement>, i: number) => {
-    const picked = await pickSolidColor(anchorFromEvent(e), gradient.stops[i].hexString);
+  const handleStopClick = async (
+    e: React.MouseEvent<HTMLButtonElement>,
+    i: number,
+  ) => {
+    const picked = await pickSolidColor(
+      anchorFromEvent(e),
+      gradient.stops[i].hexString,
+    );
     if (!picked) return;
-    onChange({ ...gradient, stops: gradient.stops.map((s, idx) => (idx === i ? { ...s, hexString: picked } : s)) });
+    onChange({
+      ...gradient,
+      stops: gradient.stops.map((s, idx) =>
+        idx === i ? { ...s, hexString: picked } : s,
+      ),
+    });
   };
 
   const handleAddStop = () => {
@@ -216,12 +263,21 @@ export function GradientColorField({ value, onChange }: GradientColorFieldProps)
     const last = sorted[sorted.length - 1];
     const prev = sorted[sorted.length - 2] ?? sorted[0];
     const newOffset = (prev.offset + last.offset) / 2;
-    onChange({ ...gradient, stops: [...gradient.stops, { hexString: last.hexString, offset: newOffset }] });
+    onChange({
+      ...gradient,
+      stops: [
+        ...gradient.stops,
+        { hexString: last.hexString, offset: newOffset },
+      ],
+    });
   };
 
   const handleRemoveStop = (i: number) => {
     if (gradient.stops.length <= 2) return; // always keep at least 2 stops
-    onChange({ ...gradient, stops: gradient.stops.filter((_, idx) => idx !== i) });
+    onChange({
+      ...gradient,
+      stops: gradient.stops.filter((_, idx) => idx !== i),
+    });
   };
 
   const handleStyleSelect = (opt: (typeof STYLE_OPTIONS)[number]) => {
@@ -229,7 +285,14 @@ export function GradientColorField({ value, onChange }: GradientColorFieldProps)
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+        width: "100%",
+      }}
+    >
       <SegmentedControl
         options={[
           { value: "solid", label: "Solid" },
@@ -243,12 +306,22 @@ export function GradientColorField({ value, onChange }: GradientColorFieldProps)
         <Swatch
           fill={[value.type === "solid" ? value.hexString : "#000000"]}
           onClick={async (e) => {
-            const picked = await pickSolidColor(anchorFromEvent(e), value.type === "solid" ? value.hexString : "#000000");
+            const picked = await pickSolidColor(
+              anchorFromEvent(e),
+              value.type === "solid" ? value.hexString : "#000000",
+            );
             if (picked) onChange({ type: "solid", hexString: picked });
           }}
         />
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+            width: "100%",
+          }}
+        >
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <Text size="small" variant="bold">
               Gradient colours
@@ -273,7 +346,8 @@ export function GradientColorField({ value, onChange }: GradientColorFieldProps)
                   borderRadius: "50%",
                   border: "2px dashed #c0c0c0",
                   background: "#fafafa",
-                  cursor: gradient.stops.length >= 5 ? "not-allowed" : "pointer",
+                  cursor:
+                    gradient.stops.length >= 5 ? "not-allowed" : "pointer",
                   opacity: gradient.stops.length >= 5 ? 0.5 : 1,
                   display: "flex",
                   alignItems: "center",
@@ -295,8 +369,14 @@ export function GradientColorField({ value, onChange }: GradientColorFieldProps)
             </Text>
             <div style={FOUR_COLUMN_GRID}>
               {STYLE_OPTIONS.map((opt, i) => {
-                const previewGradient: GradientColor = { ...gradient, shape: opt.shape, angle: opt.angle };
-                const isSelected = gradient.shape === opt.shape && (opt.shape === "radial" || gradient.angle === opt.angle);
+                const previewGradient: GradientColor = {
+                  ...gradient,
+                  shape: opt.shape,
+                  angle: opt.angle,
+                };
+                const isSelected =
+                  gradient.shape === opt.shape &&
+                  (opt.shape === "radial" || gradient.angle === opt.angle);
                 return (
                   <StretchSwatch
                     key={i}

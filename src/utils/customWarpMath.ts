@@ -1,335 +1,198 @@
+// src/utils/customWarpMath.ts
+
 export interface Point2D {
   x: number;
   y: number;
 }
 
-export interface MeshPoint {
-  x: number;
-  y: number;
-}
-
-// 1. Envelope / Custom Mesh State Types
-export interface EnvelopeMeshState {
-  top: { p0: Point2D; c1: Point2D; c2: Point2D; p1: Point2D };
-  bottom: { p0: Point2D; c1: Point2D; c2: Point2D; p1: Point2D };
-  left: { p0: Point2D; c1: Point2D; c2: Point2D; p1: Point2D };
-  right: { p0: Point2D; c1: Point2D; c2: Point2D; p1: Point2D };
+export interface CustomMeshPoint {
+  id: string;
+  x: number; // 0 to 1 relative
+  y: number; // relative Y
 }
 
 export interface CustomMeshState {
-  points: MeshPoint[];
+  topPoints: CustomMeshPoint[];
+  bottomPoints: CustomMeshPoint[];
+  points?: Point2D[]; // Legacy compatibility for parent engine
 }
 
-// 2. Default State Fallbacks
-export const DEFAULT_ENVELOPE_MESH: EnvelopeMeshState = {
-  top: {
-    p0: { x: 0, y: 0 },
-    c1: { x: 0.33, y: 0 },
-    c2: { x: 0.66, y: 0 },
-    p1: { x: 1, y: 0 },
-  },
-  bottom: {
-    p0: { x: 0, y: 1 },
-    c1: { x: 0.33, y: 1 },
-    c2: { x: 0.66, y: 1 },
-    p1: { x: 1, y: 1 },
-  },
-  left: {
-    p0: { x: 0, y: 0 },
-    c1: { x: 0, y: 0.33 },
-    c2: { x: 0, y: 0.66 },
-    p1: { x: 0, y: 1 },
-  },
-  right: {
-    p0: { x: 1, y: 0 },
-    c1: { x: 1, y: 0.33 },
-    c2: { x: 1, y: 0.66 },
-    p1: { x: 1, y: 1 },
-  },
-};
-
 export const DEFAULT_CUSTOM_MESH: CustomMeshState = {
-  points: [
-    { x: 0, y: 0 }, // 0 top-left anchor
-    { x: 0.25, y: 0 }, // 1 top-left handle
-    { x: 0.5, y: 0 }, // 2 top-center anchor
-    { x: 0.75, y: 0 }, // 3 top-right handle
-    { x: 1, y: 0 }, // 4 top-right anchor
-    { x: 0, y: 1 }, // 5 bottom-left anchor
-    { x: 0.25, y: 1 }, // 6 bottom-left handle
-    { x: 0.5, y: 1 }, // 7 bottom-center anchor
-    { x: 0.75, y: 1 }, // 8 bottom-right handle
-    { x: 1, y: 1 }, // 9 bottom-right anchor
+  topPoints: [
+    { id: "t-0", x: 0.0, y: 0.0 },
+    { id: "t-1", x: 0.5, y: 0.0 },
+    { id: "t-2", x: 1.0, y: 0.0 },
+  ],
+  bottomPoints: [
+    { id: "b-0", x: 0.0, y: 1.0 },
+    { id: "b-1", x: 0.5, y: 1.0 },
+    { id: "b-2", x: 1.0, y: 1.0 },
   ],
 };
 
-// 3. Helper Functions
-export function safeNumber(val: number, fallback = 0): number {
-  return Number.isFinite(val) ? val : fallback;
-}
+// Smooth 2D Catmull-Rom Spline with Quadratic Endpoint Curvature Preservation
+export function evaluateSpline2D(points: Point2D[] | CustomMeshPoint[], t: number): Point2D {
+  if (!points || points.length === 0) return { x: t, y: 0 };
+  const n = points.length;
+  if (n === 1) return { x: points[0].x, y: points[0].y };
 
-function evalCubicBezier(
-  p0: Point2D,
-  c1: Point2D,
-  c2: Point2D,
-  p1: Point2D,
-  t: number,
-): Point2D {
-  const mt = 1 - t;
-  const mt2 = mt * mt;
-  const mt3 = mt2 * mt;
-  const t2 = t * t;
-  const t3 = t2 * t;
-
-  return {
-    x: mt3 * p0.x + 3 * mt2 * t * c1.x + 3 * mt * t2 * c2.x + t3 * p1.x,
-    y: mt3 * p0.y + 3 * mt2 * t * c1.y + 3 * mt * t2 * c2.y + t3 * p1.y,
-  };
-}
-
-function evalQuadraticBezier(
-  p0: Point2D,
-  c: Point2D,
-  p1: Point2D,
-  t: number,
-): Point2D {
-  const mt = 1 - t;
-  return {
-    x: mt * mt * p0.x + 2 * mt * t * c.x + t * t * p1.x,
-    y: mt * mt * p0.y + 2 * mt * t * c.y + t * t * p1.y,
-  };
-}
-
-// 4. Transform Math Engine
-export function createEnvelopeTransformer(
-  mesh: EnvelopeMeshState = DEFAULT_ENVELOPE_MESH,
-) {
-  const safeMesh = mesh && mesh.top ? mesh : DEFAULT_ENVELOPE_MESH;
-
-  return (x: number, y: number, width: number, height: number) => {
-    if (!width || !height) return { x, y };
-
-    const u = Math.min(Math.max(x / width, 0), 1);
-    const v = Math.min(Math.max(y / height, 0), 1);
-
-    const topPt = evalCubicBezier(
-      safeMesh.top.p0,
-      safeMesh.top.c1,
-      safeMesh.top.c2,
-      safeMesh.top.p1,
-      u,
-    );
-    const botPt = evalCubicBezier(
-      safeMesh.bottom.p0,
-      safeMesh.bottom.c1,
-      safeMesh.bottom.c2,
-      safeMesh.bottom.p1,
-      u,
-    );
-    const leftPt = evalCubicBezier(
-      safeMesh.left.p0,
-      safeMesh.left.c1,
-      safeMesh.left.c2,
-      safeMesh.left.p1,
-      v,
-    );
-    const rightPt = evalCubicBezier(
-      safeMesh.right.p0,
-      safeMesh.right.c1,
-      safeMesh.right.c2,
-      safeMesh.right.p1,
-      v,
-    );
-
-    const cornerP00 = safeMesh.top.p0;
-    const cornerP10 = safeMesh.top.p1;
-    const cornerP01 = safeMesh.bottom.p0;
-    const cornerP11 = safeMesh.bottom.p1;
-
-    const bilinearX =
-      (1 - u) * (1 - v) * cornerP00.x +
-      u * (1 - v) * cornerP10.x +
-      (1 - u) * v * cornerP01.x +
-      u * v * cornerP11.x;
-
-    const bilinearY =
-      (1 - u) * (1 - v) * cornerP00.y +
-      u * (1 - v) * cornerP10.y +
-      (1 - u) * v * cornerP01.y +
-      u * v * cornerP11.y;
-
-    const finalX =
-      (1 - v) * topPt.x +
-      v * botPt.x +
-      (1 - u) * leftPt.x +
-      u * rightPt.x -
-      bilinearX;
-    const finalY =
-      (1 - v) * topPt.y +
-      v * botPt.y +
-      (1 - u) * leftPt.y +
-      u * rightPt.y -
-      bilinearY;
-
+  const clampT = Math.max(0, Math.min(1, t));
+  if (n === 2) {
     return {
-      x: safeNumber(finalX * width, x),
-      y: safeNumber(finalY * height, y),
-    };
-  };
-}
-
-// 5. Convert 8 draggable points -> EnvelopeMeshState
-function quadControlFromMidpoint(
-  p0: Point2D,
-  mid: Point2D,
-  p1: Point2D,
-): Point2D {
-  return {
-    x: 2 * mid.x - 0.5 * p0.x - 0.5 * p1.x,
-    y: 2 * mid.y - 0.5 * p0.y - 0.5 * p1.y,
-  };
-}
-
-function cubicFromQuad(
-  p0: Point2D,
-  q: Point2D,
-  p1: Point2D,
-): { c1: Point2D; c2: Point2D } {
-  return {
-    c1: { x: p0.x + (2 / 3) * (q.x - p0.x), y: p0.y + (2 / 3) * (q.y - p0.y) },
-    c2: { x: p1.x + (2 / 3) * (q.x - p1.x), y: p1.y + (2 / 3) * (q.y - p1.y) },
-  };
-}
-
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
-function lerpPoint(a: Point2D, b: Point2D, t: number): Point2D {
-  return {
-    x: lerp(a.x, b.x, t),
-    y: lerp(a.y, b.y, t),
-  };
-}
-
-export function normalizeCustomMesh(mesh?: CustomMeshState): CustomMeshState {
-  const points = mesh?.points;
-
-  if (Array.isArray(points) && points.length === 10) {
-    return { points };
-  }
-
-  if (Array.isArray(points) && points.length === 8) {
-    const [tl, tm, tr, , br, bm, bl] = points;
-    if (!tl || !tm || !tr || !br || !bm || !bl) {
-      return DEFAULT_CUSTOM_MESH;
-    }
-
-    return {
-      points: [
-        tl,
-        lerpPoint(tl, tm, 0.5),
-        tm,
-        lerpPoint(tm, tr, 0.5),
-        tr,
-        bl,
-        lerpPoint(bl, bm, 0.5),
-        bm,
-        lerpPoint(bm, br, 0.5),
-        br,
-      ],
+      x: points[0].x * (1 - clampT) + points[1].x * clampT,
+      y: points[0].y * (1 - clampT) + points[1].y * clampT,
     };
   }
 
-  return DEFAULT_CUSTOM_MESH;
-}
+  const totalSegments = n - 1;
+  const tGlobal = clampT * totalSegments;
+  const i = Math.min(Math.floor(tGlobal), totalSegments - 1);
+  const s = tGlobal - i;
 
-export function evalMeshRow(row: MeshPoint[], u: number): Point2D {
-  if (!Array.isArray(row) || row.length < 5) {
-    return { x: u, y: 0 };
-  }
+  const p1 = points[i];
+  const p2 = points[i + 1];
 
-  const t = Math.min(Math.max(u, 0), 1);
+  const p0 =
+    i > 0
+      ? points[i - 1]
+      : {
+          x: 3 * points[0].x - 3 * points[1].x + points[2].x,
+          y: 3 * points[0].y - 3 * points[1].y + points[2].y,
+        };
 
-  if (t <= 0.5) {
-    return evalQuadraticBezier(row[0], row[1], row[2], t / 0.5);
-  }
-  return evalQuadraticBezier(row[2], row[3], row[4], (t - 0.5) / 0.5);
-}
+  const p3 =
+    i + 2 < n
+      ? points[i + 2]
+      : {
+          x: 3 * points[n - 1].x - 3 * points[n - 2].x + points[n - 3].x,
+          y: 3 * points[n - 1].y - 3 * points[n - 2].y + points[n - 3].y,
+        };
 
-export function pointsToEnvelopeMesh(points: MeshPoint[]): EnvelopeMeshState {
-  const safePoints =
-    Array.isArray(points) && points.length === 8
-      ? points
-      : normalizeCustomMesh({ points }).points;
+  const s2 = s * s;
+  const s3 = s2 * s;
 
-  if (safePoints.length === 10) {
-    const [tl, , tm, , tr, bl, , bm, , br] = safePoints;
-    if (!tl || !tm || !tr || !bl || !bm || !br) {
-      return DEFAULT_ENVELOPE_MESH;
-    }
-
-    const lm = lerpPoint(tl, bl, 0.5);
-    const rm = lerpPoint(tr, br, 0.5);
-
-    const topQ = quadControlFromMidpoint(tl, tm, tr);
-    const bottomQ = quadControlFromMidpoint(bl, bm, br);
-    const leftQ = quadControlFromMidpoint(tl, lm, bl);
-    const rightQ = quadControlFromMidpoint(tr, rm, br);
-
-    return {
-      top: { p0: tl, ...cubicFromQuad(tl, topQ, tr), p1: tr },
-      bottom: { p0: bl, ...cubicFromQuad(bl, bottomQ, br), p1: br },
-      left: { p0: tl, ...cubicFromQuad(tl, leftQ, bl), p1: bl },
-      right: { p0: tr, ...cubicFromQuad(tr, rightQ, br), p1: br },
-    };
-  }
-
-  const [tl, tm, tr, rm, br, bm, bl, lm] = safePoints;
-  if (!tl || !tm || !tr || !rm || !br || !bm || !bl || !lm) {
-    return DEFAULT_ENVELOPE_MESH;
-  }
-
-  const topQ = quadControlFromMidpoint(tl, tm, tr);
-  const bottomQ = quadControlFromMidpoint(bl, bm, br);
-  const leftQ = quadControlFromMidpoint(tl, lm, bl);
-  const rightQ = quadControlFromMidpoint(tr, rm, br);
+  const evalAxis = (c0: number, c1: number, c2: number, c3: number) =>
+    0.5 *
+    (2 * c1 +
+      (-c0 + c2) * s +
+      (2 * c0 - 5 * c1 + 4 * c2 - c3) * s2 +
+      (-c0 + 3 * c1 - 3 * c2 + c3) * s3);
 
   return {
-    top: { p0: tl, ...cubicFromQuad(tl, topQ, tr), p1: tr },
-    bottom: { p0: bl, ...cubicFromQuad(bl, bottomQ, br), p1: br },
-    left: { p0: tl, ...cubicFromQuad(tl, leftQ, bl), p1: bl },
-    right: { p0: tr, ...cubicFromQuad(tr, rightQ, br), p1: br },
+    x: evalAxis(p0.x, p1.x, p2.x, p3.x),
+    y: evalAxis(p0.y, p1.y, p2.y, p3.y),
   };
 }
 
-// FIXED: Added optional bounds parameter to handle initial offset (minX, minY)
-export function createCustomMeshTransformer(
-  mesh: CustomMeshState = DEFAULT_CUSTOM_MESH,
-  bounds?: { minX: number; minY: number; width: number; height: number },
-) {
-  const safeMesh = normalizeCustomMesh(mesh);
-  const topRow = safeMesh.points.slice(0, 5);
-  const bottomRow = safeMesh.points.slice(5, 10);
+export const evaluateCurveAtX = evaluateSpline2D;
 
-  return (x: number, y: number, width: number, height: number) => {
-    if (!width || !height) return { x, y };
+export function sampleCurve(points: CustomMeshPoint[], steps: number = 40): Point2D[] {
+  if (!points || points.length === 0) return [];
+  const curve: Point2D[] = [];
+  for (let s = 0; s <= steps; s++) {
+    curve.push(evaluateSpline2D(points, s / steps));
+  }
+  return curve;
+}
 
-    const minX = bounds?.minX ?? 0;
-    const minY = bounds?.minY ?? 0;
+// Rotate manual mesh points around center by angleDeg (0° - 360°)
+export function rotateCustomMesh(
+  baseMesh: CustomMeshState,
+  angleDeg: number,
+  textAspectRatio: number = 3.0
+): CustomMeshState {
+  const safe = normalizeCustomMesh(baseMesh);
+  const all = [...safe.topPoints, ...safe.bottomPoints];
+  if (all.length === 0) return safe;
 
-    const relX = x - minX;
-    const relY = y - minY;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of all) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
 
-    const u = Math.min(Math.max(relX / width, 0), 1);
-    const v = Math.min(Math.max(relY / height, 0), 1);
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  const rad = (angleDeg * Math.PI) / 180;
+  const cosA = Math.cos(rad);
+  const sinA = Math.sin(rad);
+  const ar = Math.max(0.2, textAspectRatio);
 
-    const top = evalMeshRow(topRow, u);
-    const bottom = evalMeshRow(bottomRow, u);
-
+  const rotatePt = (pt: CustomMeshPoint): CustomMeshPoint => {
+    const dx = pt.x - cx;
+    const dy = (pt.y - cy) / ar;
+    const rx = dx * cosA - dy * sinA;
+    const ry = dx * sinA + dy * cosA;
     return {
-      x: safeNumber(minX + lerp(top.x, bottom.x, v) * width, x),
-      y: safeNumber(minY + lerp(top.y, bottom.y, v) * height, y),
+      ...pt,
+      x: Number((cx + rx).toFixed(4)),
+      y: Number((cy + ry * ar).toFixed(4)),
     };
+  };
+
+  return normalizeCustomMesh({
+    topPoints: safe.topPoints.map(rotatePt),
+    bottomPoints: safe.bottomPoints.map(rotatePt),
+  });
+}
+
+export function normalizeCustomMesh(mesh?: CustomMeshState | null): CustomMeshState {
+  if (!mesh) return JSON.parse(JSON.stringify(DEFAULT_CUSTOM_MESH));
+
+  let topPoints: CustomMeshPoint[];
+  let bottomPoints: CustomMeshPoint[];
+
+  if (Array.isArray(mesh.topPoints) && Array.isArray(mesh.bottomPoints) && mesh.topPoints.length > 0) {
+    topPoints = mesh.topPoints.map((p, i) => ({
+      id: p.id || `t-${i}`,
+      x: Number.isFinite(p.x) ? p.x : i / Math.max(1, mesh.topPoints.length - 1),
+      y: Number.isFinite(p.y) ? p.y : 0,
+    }));
+    bottomPoints = mesh.bottomPoints.map((p, i) => ({
+      id: p.id || `b-${i}`,
+      x: Number.isFinite(p.x) ? p.x : i / Math.max(1, mesh.bottomPoints.length - 1),
+      y: Number.isFinite(p.y) ? p.y : 1,
+    }));
+  } else {
+    return JSON.parse(JSON.stringify(DEFAULT_CUSTOM_MESH));
+  }
+
+  const legacyPoints: Point2D[] = [
+    evaluateSpline2D(topPoints, 0.0),
+    evaluateSpline2D(topPoints, 0.25),
+    evaluateSpline2D(topPoints, 0.5),
+    evaluateSpline2D(topPoints, 0.75),
+    evaluateSpline2D(topPoints, 1.0),
+    evaluateSpline2D(bottomPoints, 0.0),
+    evaluateSpline2D(bottomPoints, 0.25),
+    evaluateSpline2D(bottomPoints, 0.5),
+    evaluateSpline2D(bottomPoints, 0.75),
+    evaluateSpline2D(bottomPoints, 1.0),
+  ];
+
+  return { topPoints, bottomPoints, points: legacyPoints };
+}
+
+export function evalMeshRow(row: Point2D[], t: number): Point2D {
+  if (!row || row.length === 0) return { x: 0, y: 0 };
+  return evaluateSpline2D(row, t);
+}
+
+export function createCustomMeshTransformer(mesh: CustomMeshState) {
+  const safe = normalizeCustomMesh(mesh);
+
+  return (localX: number, localY: number, width: number, height: number): Point2D => {
+    const u = width > 0 ? localX / width : 0;
+    const v = height > 0 ? localY / height : 0;
+
+    const top = evaluateSpline2D(safe.topPoints, u);
+    const bottom = evaluateSpline2D(safe.bottomPoints, u);
+
+    const finalX = (top.x * (1 - v) + bottom.x * v) * width;
+    const finalY = (top.y * (1 - v) + bottom.y * v) * height;
+
+    return { x: finalX, y: finalY };
   };
 }

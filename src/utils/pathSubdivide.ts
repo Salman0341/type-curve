@@ -23,10 +23,14 @@ interface PathCommand {
 const SEGMENTS_PER_CURVE = 32;
 
 function cubicPoint(
-  p0x: number, p0y: number,
-  c1x: number, c1y: number,
-  c2x: number, c2y: number,
-  p1x: number, p1y: number,
+  p0x: number,
+  p0y: number,
+  c1x: number,
+  c1y: number,
+  c2x: number,
+  c2y: number,
+  p1x: number,
+  p1y: number,
   t: number,
 ): { x: number; y: number } {
   const mt = 1 - t;
@@ -41,9 +45,12 @@ function cubicPoint(
 }
 
 function quadPoint(
-  p0x: number, p0y: number,
-  cx: number, cy: number,
-  p1x: number, p1y: number,
+  p0x: number,
+  p0y: number,
+  cx: number,
+  cy: number,
+  p1x: number,
+  p1y: number,
   t: number,
 ): { x: number; y: number } {
   const mt = 1 - t;
@@ -70,7 +77,14 @@ export function flattenCurves(commands: PathCommand[]): PathCommand[] {
       curX = cmd.x ?? curX;
       curY = cmd.y ?? curY;
     } else if (cmd.type === "C") {
-      const { x1 = curX, y1 = curY, x2 = curX, y2 = curY, x = curX, y = curY } = cmd;
+      const {
+        x1 = curX,
+        y1 = curY,
+        x2 = curX,
+        y2 = curY,
+        x = curX,
+        y = curY,
+      } = cmd;
       for (let i = 1; i <= SEGMENTS_PER_CURVE; i++) {
         const t = i / SEGMENTS_PER_CURVE;
         const p = cubicPoint(curX, curY, x1, y1, x2, y2, x, y, t);

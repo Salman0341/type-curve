@@ -27,18 +27,25 @@ export function useAddTextWarpToDesign(args: WarpRenderArgs) {
       });
 
       const pageContext = await getCurrentPageContext();
-      const pageWidth = pageContext.dimensions?.width ?? 500;
-      const pageHeight = pageContext.dimensions?.height ?? 500;
+      const pageWidth = pageContext.dimensions?.width ?? 800;
+      const pageHeight = pageContext.dimensions?.height ?? 600;
 
-      const elementWidth = Math.min(width / 2, pageWidth * 0.7);
-      const elementHeight = (elementWidth * height) / width;
+      // Element width canvas ka 70% aur aspect ratio perfectly preserved
+      const elementWidth = Math.round(Math.min(width, pageWidth * 0.7));
+      const elementHeight = Math.round((elementWidth * height) / width);
+
+      const top = Math.round((pageHeight - elementHeight) / 2);
+      const left = Math.round((pageWidth - elementWidth) / 2);
 
       await addElementAtPoint({
         type: "image",
         ref,
-        altText: undefined,
-        top: (pageHeight - elementHeight) / 2,
-        left: (pageWidth - elementWidth) / 2,
+        altText: {
+          text: args.text,
+          decorative: false,
+        },
+        top,
+        left,
         width: elementWidth,
         height: elementHeight,
       });

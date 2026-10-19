@@ -1,7 +1,6 @@
 // src/utils/warpTextCompute.ts
 import type opentype from "opentype.js";
-import type {
-  CustomMeshState} from "./customWarpMath";
+import type { CustomMeshState } from "./customWarpMath";
 import {
   DEFAULT_CUSTOM_MESH,
   createCustomMeshTransformer,
